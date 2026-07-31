@@ -185,6 +185,21 @@ gospect-mcp scan ./testdata/buggy
 
 ---
 
+## The `propose_fix` tool (report-first)
+
+Fixes are opt-in and separate from scanning. `propose_fix` takes a finding and returns a **fix
+envelope** — it never edits code:
+
+- `root_cause`, `expected_scope`, and a `reuse_hint` (reuse before adding)
+- a `verify_first` checklist led by an **adversarial** "default to *not* a real issue" prompt
+- ponytail `constraints` (smallest root-cause fix, no unrequested abstractions, one runnable check)
+
+The calling agent uses the envelope to make a minimal, verified fix. CLI form:
+
+```sh
+echo '{"detector":"unchecked-error","file":"x.go","line":14,"message":"..."}' | gospect-mcp propose-fix
+```
+
 ## How it works
 
 ```
@@ -229,8 +244,9 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
 - [x] Phase 0 — loader, bug/missing/modernize detectors, MCP stdio server, CLI
 - [x] Compose with a code graph — MCP **client** + a codebase-memory adapter; graph detectors:
   **untested-exports**, **over-engineering**, **missing-handler**, **stale-swagger**
-- [ ] `propose_fix` (emits a fix envelope; still report-first)
-- [ ] CI mode with a fix-envelope gate
+- [x] `propose_fix` — emits a fix envelope (root cause, verify-first, scope, ponytail
+  constraints); never edits code
+- [ ] gospect-as-CI-gate mode (block a PR on findings; enforce the fix envelope)
 
 ---
 

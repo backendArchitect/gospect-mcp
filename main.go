@@ -19,9 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
+	"github.com/backendArchitect/gospect-mcp/internal/detect"
+	"github.com/backendArchitect/gospect-mcp/internal/fix"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
 	"github.com/backendArchitect/gospect-mcp/internal/mcp"
@@ -37,6 +40,9 @@ func main() {
 			return
 		case "update":
 			runSelfUpdate()
+			return
+		case "propose-fix":
+			runProposeFix()
 			return
 		}
 	}
@@ -104,10 +110,63 @@ func main() {
 		},
 	})
 
+	srv.Register(mcp.Tool{
+		Name: "propose_fix",
+		Description: "Return a report-first FIX ENVELOPE for a finding (root cause, verify-first checklist, " +
+			"expected scope, reuse hint, ponytail constraints). Emits guidance only — never edits code. " +
+			"Invoke only when a fix is explicitly requested.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"detector": map[string]any{"type": "string", "description": "the finding's detector, e.g. nilness"},
+				"category": map[string]any{"type": "string"},
+				"message":  map[string]any{"type": "string"},
+				"file":     map[string]any{"type": "string"},
+				"line":     map[string]any{"type": "integer"},
+				"package":  map[string]any{"type": "string"},
+			},
+			"required": []string{"detector"},
+		},
+		Handler: func(args json.RawMessage) (string, error) {
+			return envelopeJSON(args)
+		},
+	})
+
 	if err := srv.Serve(os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "server error:", err)
 		os.Exit(1)
 	}
+}
+
+// envelopeJSON builds a fix envelope from a finding's JSON and returns it pretty-printed.
+func envelopeJSON(raw []byte) (string, error) {
+	var f detect.Finding
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return "", fmt.Errorf("invalid finding: %w", err)
+	}
+	if f.Detector == "" {
+		return "", fmt.Errorf("detector is required")
+	}
+	out, err := json.MarshalIndent(fix.Build(f), "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// runProposeFix is the CLI form: it reads a finding as JSON on stdin and prints the envelope.
+func runProposeFix() {
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read stdin:", err)
+		os.Exit(1)
+	}
+	out, err := envelopeJSON(raw)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println(out)
 }
 
 // runSelfUpdate checks GitHub for a newer release and updates via `go install` when one exists.
