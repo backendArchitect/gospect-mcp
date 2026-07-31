@@ -1,0 +1,92 @@
+name: release
+
+# Auto-release on every push to main: test -> patch-bump a tag -> build cross-platform
+# binaries -> publish a GitHub Release. Put "[skip release]" in the commit message to skip.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go vet ./...
+      - run: go test ./...
+
+  tag:
+    needs: test
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compute next tag (patch bump)
+        id: next
+        run: |
+          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -z "$latest" ]; then
+            next="v0.1.0"
+          else
+            IFS=. read -r a b c <<< "${latest#v}"
+            next="v${a}.${b}.$((c + 1))"
+          fi
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+          echo "Next release: $next (previous: ${latest:-none})"
+      - name: Create and push tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.next.outputs.tag }}" -m "Release ${{ steps.next.outputs.tag }}"
+          git push origin "${{ steps.next.outputs.tag }}"
+
+  build:
+    needs: tag
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Build & package
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          bin="gospect-mcp"
+          [ "$GOOS" = "windows" ] && bin="gospect-mcp.exe"
+          ldflags="-s -w -X github.com/backendArchitect/gospect-mcp/internal/selfupdate.injected=${TAG}"
+          go build -trimpath -ldflags="$ldflags" -o "$bin" .
+          name="gospect-mcp_${TAG}_${GOOS}_${GOARCH}"
+          tar -czf "${name}.tar.gz" "$bin"
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            *.tar.gz
+            *.tar.gz.sha256

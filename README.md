@@ -3,7 +3,8 @@
 ![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8?logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green)
 ![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)
-![Status](https://img.shields.io/badge/status-phase--0-yellow)
+[![CI](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml)
+[![Release](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml)
 
 **A Go-only, report-first code scanner exposed as an MCP server.** It indexes a Go module,
 runs deterministic analyzers, and **reports** genuine bugs, dead code, stale docs and outdated
@@ -23,7 +24,8 @@ go install github.com/backendArchitect/gospect-mcp@latest
 ```
 
 This drops a `gospect-mcp` binary in your `$GOBIN` (usually `~/go/bin` — make sure it's on your
-`PATH`). Then scan any Go module:
+`PATH`). Or grab a prebuilt binary (Linux/macOS/Windows, amd64/arm64) from the
+[Releases page](https://github.com/backendArchitect/gospect-mcp/releases). Then scan any Go module:
 
 ```sh
 gospect-mcp scan /path/to/your/module ./...
@@ -211,6 +213,13 @@ go test ./...                 # run the tests
 unchecked error, an old `go.mod`) that the test suite asserts each detector catches.
 
 ---
+
+## Releases & CI
+
+- **PRs** run `go vet` + `go test` + `go build` (`ci.yml`).
+- **Pushes to `main`** run the tests and then auto-cut a release (`release.yml`): patch-bump a
+  `vX.Y.Z` tag and publish cross-platform binaries + checksums to GitHub Releases. Add
+  `[skip release]` to a commit message to skip releasing.
 
 ## Roadmap
 

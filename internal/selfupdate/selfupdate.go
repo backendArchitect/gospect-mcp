@@ -21,9 +21,17 @@ const (
 	module = "github.com/backendArchitect/gospect-mcp"
 )
 
-// Current returns the version embedded by `go install module@vX` (from build info), or "dev"
-// for local `go build` / `go run` builds.
+// injected is set at release-build time via -ldflags (-X ...selfupdate.injected=vX.Y.Z) so
+// downloaded binaries (built with `go build`) report the right version. `go install module@vX`
+// doesn't need it — the version comes from build info below.
+var injected string
+
+// Current returns the release version: the ldflags-injected value if present, else the version
+// embedded by `go install module@vX` (build info), else "dev" for local builds.
 func Current() string {
+	if injected != "" {
+		return injected
+	}
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		if v := bi.Main.Version; v != "" && v != "(devel)" {
 			return v
