@@ -33,6 +33,17 @@ You'll get a JSON report of findings. That's it — no config, no services, no c
 
 > Prefer building it yourself? See [From source](#from-source).
 
+### Keeping up to date
+
+```sh
+gospect-mcp version   # print the installed version
+gospect-mcp update    # check GitHub for a newer release; update if one exists, else "up to date"
+```
+
+`update` checks the latest GitHub release and, when a newer one exists, reinstalls via
+`go install …@<tag>`. If no release is newer it prints that you're up to date; if none are
+published yet it says so.
+
 ---
 
 ## Why gospect-mcp

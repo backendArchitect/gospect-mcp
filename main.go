@@ -26,11 +26,21 @@ import (
 	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
 	"github.com/backendArchitect/gospect-mcp/internal/mcp"
 	"github.com/backendArchitect/gospect-mcp/internal/scan"
+	"github.com/backendArchitect/gospect-mcp/internal/selfupdate"
 )
 
-const version = "0.1.0"
-
 func main() {
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "version":
+			fmt.Println("gospect-mcp", selfupdate.Current())
+			return
+		case "update":
+			runSelfUpdate()
+			return
+		}
+	}
+
 	ctx := context.Background()
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
@@ -50,7 +60,7 @@ func main() {
 	}
 
 	// Default: MCP server over stdio.
-	srv := mcp.NewServer("gospect-mcp", version)
+	srv := mcp.NewServer("gospect-mcp", selfupdate.Current())
 	srv.Register(mcp.Tool{
 		Name:        "scan",
 		Description: "Scan a Go module for issues (report-only). Returns findings as JSON; never modifies code.",
@@ -98,6 +108,31 @@ func main() {
 		fmt.Fprintln(os.Stderr, "server error:", err)
 		os.Exit(1)
 	}
+}
+
+// runSelfUpdate checks GitHub for a newer release and updates via `go install` when one exists.
+func runSelfUpdate() {
+	ctx := context.Background()
+	cur := selfupdate.Current()
+	tag, url, err := selfupdate.Latest(ctx, "")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "update check failed:", err)
+		os.Exit(1)
+	}
+	if tag == "" {
+		fmt.Printf("gospect-mcp %s — no releases published yet.\n", cur)
+		return
+	}
+	if !selfupdate.Newer(cur, tag) {
+		fmt.Printf("gospect-mcp %s is up to date (latest release: %s).\n", cur, tag)
+		return
+	}
+	fmt.Printf("Updating gospect-mcp %s -> %s ...\n", cur, tag)
+	if err := selfupdate.Install(ctx, tag); err != nil {
+		fmt.Fprintf(os.Stderr, "update failed: %v\nDownload manually: %s\n", err, url)
+		os.Exit(1)
+	}
+	fmt.Printf("Updated to %s. Restart gospect-mcp to use the new version.\n", tag)
 }
 
 // buildGraph constructs an optional code-intelligence graph from env. It returns a nil Graph
