@@ -97,6 +97,26 @@ a code graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-
 
 ---
 
+## Optional: compose with a code graph
+
+Some detectors need whole-repo relationships (call graph, routes, test coverage) that
+single-package analysis can't see. `gospect-mcp` gets these by acting as an MCP **client** of a
+code-intelligence graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
+— no graph of its own, no duplicated index.
+
+Enable it with three env vars (all optional; unset = graph disabled, local detectors still run):
+
+```sh
+export GOSPECT_GRAPH_CMD="codebase-memory-mcp"   # command to launch the graph MCP server
+export GOSPECT_GRAPH_PROJECT="my-project"         # project name to query
+export GOSPECT_GRAPH_SCOPE="internal/"            # optional file-path substring to scope queries
+gospect-mcp scan /path/to/module
+```
+
+When configured, the report gains graph-backed findings (currently **untested-exports** —
+exported functions with no test). A graph connection failure never fails the scan; it's recorded
+in the report's `graph_error` field and the local findings are still returned.
+
 ## The `scan` tool
 
 **Input**
@@ -180,8 +200,9 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
 ## Roadmap
 
 - [x] Phase 0 — loader, bug/missing/modernize detectors, MCP stdio server, CLI
-- [ ] Compose with a code graph for reachability, routes, and test coverage
-- [ ] Over-engineering + stale-swagger + untested-exports + missing-handler detectors
+- [x] Compose with a code graph — MCP **client** + a codebase-memory adapter; first graph-backed
+  detector: **untested-exports**
+- [ ] More graph detectors: over-engineering, stale-swagger, missing-handler
 - [ ] `propose_fix` (emits a fix envelope; still report-first)
 - [ ] CI mode with a fix-envelope gate
 

@@ -6,13 +6,24 @@
 //	gospect-mcp scan <dir> ...  # standalone CLI: print a JSON report
 //
 // It never modifies code. Fixes are a separate, explicitly-invoked step (not yet implemented).
+//
+// Optional graph composition — set these to enable graph-backed detectors (e.g. untested-exports)
+// by spawning a codebase-memory-mcp-compatible server:
+//
+//	GOSPECT_GRAPH_CMD      command to launch the graph MCP server (e.g. "codebase-memory-mcp")
+//	GOSPECT_GRAPH_PROJECT  project name to query
+//	GOSPECT_GRAPH_SCOPE    file-path substring to scope graph queries (optional)
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/backendArchitect/gospect-mcp/internal/graph"
+	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
 	"github.com/backendArchitect/gospect-mcp/internal/mcp"
 	"github.com/backendArchitect/gospect-mcp/internal/scan"
 )
@@ -20,9 +31,15 @@ import (
 const version = "0.1.0"
 
 func main() {
+	ctx := context.Background()
+	g, cleanup, scope := buildGraph(ctx)
+	defer cleanup()
+
 	// Standalone CLI mode for quick local use / testing.
 	if len(os.Args) >= 3 && os.Args[1] == "scan" {
-		rep, err := scan.Scan(os.Args[2], os.Args[3:]...)
+		rep, err := scan.ScanWithOptions(os.Args[2], scan.Options{
+			Patterns: os.Args[3:], Graph: g, GraphScope: scope,
+		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "scan error:", err)
 			os.Exit(1)
@@ -63,7 +80,9 @@ func main() {
 			if a.Path == "" {
 				return "", fmt.Errorf("path is required")
 			}
-			rep, err := scan.Scan(a.Path, a.Patterns...)
+			rep, err := scan.ScanWithOptions(a.Path, scan.Options{
+				Patterns: a.Patterns, Graph: g, GraphScope: scope,
+			})
 			if err != nil {
 				return "", err
 			}
@@ -79,4 +98,28 @@ func main() {
 		fmt.Fprintln(os.Stderr, "server error:", err)
 		os.Exit(1)
 	}
+}
+
+// buildGraph constructs an optional code-intelligence graph from env. It returns a nil Graph
+// (and a no-op cleanup) when unconfigured or on any connection error — gospect then runs its
+// local detectors only, unaffected.
+func buildGraph(ctx context.Context) (graph.Graph, func(), string) {
+	cmdline := strings.TrimSpace(os.Getenv("GOSPECT_GRAPH_CMD"))
+	project := strings.TrimSpace(os.Getenv("GOSPECT_GRAPH_PROJECT"))
+	scope := os.Getenv("GOSPECT_GRAPH_SCOPE")
+	if cmdline == "" || project == "" {
+		return nil, func() {}, ""
+	}
+	parts := strings.Fields(cmdline)
+	client, err := mcp.DialCommand(ctx, parts[0], parts[1:]...)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "graph disabled:", err)
+		return nil, func() {}, ""
+	}
+	if err := client.Initialize(); err != nil {
+		fmt.Fprintln(os.Stderr, "graph disabled (init failed):", err)
+		_ = client.Close()
+		return nil, func() {}, ""
+	}
+	return cbm.New(client, project), func() { _ = client.Close() }, scope
 }

@@ -3,12 +3,22 @@
 package scan
 
 import (
+	"context"
 	"sort"
 	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
+	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/loader"
 )
+
+// Options configures a scan. Graph is optional: when nil, only the local (single-package)
+// detectors run and gospect works fully standalone.
+type Options struct {
+	Patterns   []string
+	Graph      graph.Graph // optional code-intelligence graph (e.g. codebase-memory-mcp)
+	GraphScope string      // file-path substring used to scope graph queries
+}
 
 // Report is the report-only output of a scan.
 type Report struct {
@@ -20,11 +30,19 @@ type Report struct {
 	ScanMillis     int64            `json:"scan_millis"`
 	FindingCount   int              `json:"finding_count"`
 	ByCategory     map[string]int   `json:"by_category"`
+	GraphError     string           `json:"graph_error,omitempty"`
 	Findings       []detect.Finding `json:"findings"`
 }
 
-// Scan loads the module at dir and runs the deterministic detectors.
+// Scan is the standalone entry point (no graph).
 func Scan(dir string, patterns ...string) (*Report, error) {
+	return ScanWithOptions(dir, Options{Patterns: patterns})
+}
+
+// ScanWithOptions loads the module at dir and runs the detectors, plus any graph-backed
+// detectors when opt.Graph is set.
+func ScanWithOptions(dir string, opt Options) (*Report, error) {
+	patterns := opt.Patterns
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
@@ -35,8 +53,8 @@ func Scan(dir string, patterns ...string) (*Report, error) {
 
 	start := time.Now()
 	var findings []detect.Finding
-	// Each detector is independent and report-only. A detector erroring aborts the scan rather
-	// than returning a partial, misleading "all clear".
+	// Local detectors are independent and report-only. A local detector erroring aborts the scan
+	// rather than returning a partial, misleading "all clear".
 	for _, run := range []func() ([]detect.Finding, error){
 		func() ([]detect.Finding, error) { return detect.RunBugDetectors(pkgs) },
 		func() ([]detect.Finding, error) { return detect.RunMissingCode(pkgs) },
@@ -48,8 +66,23 @@ func Scan(dir string, patterns ...string) (*Report, error) {
 		}
 		findings = append(findings, fs...)
 	}
-	sortFindings(findings)
 
+	// Graph-backed detectors are additive: a graph failure is recorded but never fails the
+	// local scan, since the local findings are valuable on their own.
+	var graphErr string
+	if opt.Graph != nil {
+		scope := opt.GraphScope
+		if scope == "" {
+			scope = dir
+		}
+		if fs, err := detect.RunUntestedExports(context.Background(), opt.Graph, scope); err != nil {
+			graphErr = err.Error()
+		} else {
+			findings = append(findings, fs...)
+		}
+	}
+
+	sortFindings(findings)
 	byCat := map[string]int{}
 	for _, f := range findings {
 		byCat[f.Category]++
@@ -64,6 +97,7 @@ func Scan(dir string, patterns ...string) (*Report, error) {
 		ScanMillis:     time.Since(start).Milliseconds(),
 		FindingCount:   len(findings),
 		ByCategory:     byCat,
+		GraphError:     graphErr,
 		Findings:       findings,
 	}, nil
 }
