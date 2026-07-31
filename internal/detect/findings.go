@@ -12,4 +12,8 @@ type Finding struct {
 	Col      int    `json:"col"`
 	Message  string `json:"message"`
 	Package  string `json:"package"`
+	// Fingerprint is a stable identity for the finding (detector + relative path + message),
+	// deliberately independent of line number so it survives edits that shift lines. Used to match
+	// findings across runs (baseline mode) and to dedupe in SARIF. Set by the scan layer.
+	Fingerprint string `json:"fingerprint,omitempty"`
 }

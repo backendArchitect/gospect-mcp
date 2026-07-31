@@ -8,15 +8,17 @@ import (
 // FilterOptions narrows a report's findings for display. Zero value = no filtering. Filtering is a
 // presentation concern applied after the scan, so the underlying detection is unaffected.
 type FilterOptions struct {
-	MinSeverity string   // drop findings below this severity ("low"|"medium"|"high"); "" = keep all
-	Categories  []string // keep only these categories, if non-empty
-	Detectors   []string // keep only these detectors, if non-empty
-	ExcludeGlob []string // drop findings whose file path matches any of these globs (e.g. "*.pb.go")
+	MinSeverity      string   // drop findings below this severity ("low"|"medium"|"high"); "" = keep all
+	Categories       []string // keep only these categories, if non-empty
+	Detectors        []string // keep only these detectors, if non-empty
+	ExcludeGlob      []string // drop findings whose file path matches any of these globs (e.g. "*.pb.go")
+	ExcludeDetectors []string // drop findings from these detectors (used by .gospectignore)
 }
 
 // Empty reports whether the options would filter nothing (lets callers skip work and reporting).
 func (o FilterOptions) Empty() bool {
-	return o.MinSeverity == "" && len(o.Categories) == 0 && len(o.Detectors) == 0 && len(o.ExcludeGlob) == 0
+	return o.MinSeverity == "" && len(o.Categories) == 0 && len(o.Detectors) == 0 &&
+		len(o.ExcludeGlob) == 0 && len(o.ExcludeDetectors) == 0
 }
 
 // Apply filters the report's findings in place and recomputes FindingCount + ByCategory. It returns
@@ -28,6 +30,7 @@ func (r *Report) Apply(o FilterOptions) (removed int) {
 	minRank := severityRank(o.MinSeverity)
 	cats := toSet(o.Categories)
 	dets := toSet(o.Detectors)
+	exclDets := toSet(o.ExcludeDetectors)
 
 	kept := r.Findings[:0]
 	for _, f := range r.Findings {
@@ -35,6 +38,7 @@ func (r *Report) Apply(o FilterOptions) (removed int) {
 		case minRank > 0 && severityRank(f.Severity) < minRank:
 		case len(cats) > 0 && !cats[f.Category]:
 		case len(dets) > 0 && !dets[f.Detector]:
+		case exclDets[f.Detector]:
 		case matchesAnyGlob(f.File, o.ExcludeGlob):
 		default:
 			kept = append(kept, f)
@@ -43,11 +47,7 @@ func (r *Report) Apply(o FilterOptions) (removed int) {
 		removed++
 	}
 	r.Findings = kept
-	r.FindingCount = len(kept)
-	r.ByCategory = map[string]int{}
-	for _, f := range kept {
-		r.ByCategory[f.Category]++
-	}
+	r.recount()
 	return removed
 }
 

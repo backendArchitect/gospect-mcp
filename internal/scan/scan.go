@@ -5,7 +5,10 @@ package scan
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
@@ -40,10 +43,24 @@ type Report struct {
 	ScanMillis     int64            `json:"scan_millis"`
 	FindingCount   int              `json:"finding_count"`
 	Suppressed     int              `json:"suppressed"`
+	Ignored        int              `json:"ignored,omitempty"` // dropped by a .gospectignore rule
 	SkippedModules []string         `json:"skipped_modules,omitempty"`
 	ByCategory     map[string]int   `json:"by_category"`
+	BySeverity     map[string]int   `json:"by_severity"`
 	GraphError     string           `json:"graph_error,omitempty"`
 	Findings       []detect.Finding `json:"findings"`
+}
+
+// recount refreshes FindingCount and the by-category / by-severity summaries from Findings. Called
+// after the finding set changes (initial build, filtering, baseline diff).
+func (r *Report) recount() {
+	r.FindingCount = len(r.Findings)
+	r.ByCategory = map[string]int{}
+	r.BySeverity = map[string]int{}
+	for _, f := range r.Findings {
+		r.ByCategory[f.Category]++
+		r.BySeverity[f.Severity]++
+	}
 }
 
 // Scan is the standalone entry point (no graph).
@@ -129,13 +146,14 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	// Honor //gospect:ignore directives: authors mark intentional code so it drops from the report.
 	findings, suppressed := detect.ApplySuppressions(findings)
 
-	sortFindings(findings)
-	byCat := map[string]int{}
-	for _, f := range findings {
-		byCat[f.Category]++
+	// Stable identity per finding (line-independent) for baseline matching and SARIF dedup.
+	for i := range findings {
+		findings[i].Fingerprint = fingerprint(dir, findings[i])
 	}
 
-	return &Report{
+	sortFindings(findings)
+
+	rep := &Report{
 		Path:           dir,
 		Patterns:       patterns,
 		PackagesLoaded: stats.Packages,
@@ -143,13 +161,27 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		LoadErrors:     stats.Errors,
 		LoadMillis:     stats.Duration.Milliseconds(),
 		ScanMillis:     time.Since(start).Milliseconds(),
-		FindingCount:   len(findings),
 		Suppressed:     suppressed,
 		SkippedModules: stats.Skipped,
-		ByCategory:     byCat,
 		GraphError:     graphErr,
 		Findings:       findings,
-	}, nil
+	}
+	// A checked-in .gospectignore suppresses repo-declared noise for every consumer (CLI + MCP).
+	rep.Ignored = rep.Apply(loadIgnoreFile(dir))
+	rep.recount()
+	return rep, nil
+}
+
+// fingerprint is a short stable hash of (detector, path-relative-to-scan-root, message). Excluding
+// the line number keeps it stable when unrelated edits shift a finding up or down the file.
+func fingerprint(dir string, f detect.Finding) string {
+	rel := f.File
+	if r, err := filepath.Rel(dir, f.File); err == nil {
+		rel = r
+	}
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%s\x00%s\x00%s", f.Detector, filepath.ToSlash(rel), f.Message)
+	return strconv.FormatUint(h.Sum64(), 16)
 }
 
 // sortFindings orders the report by importance so the most actionable issues are on top: highest
