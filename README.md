@@ -130,6 +130,9 @@ When configured, the report gains graph-backed findings:
 - **untested-exports** — exported functions with no incoming test.
 - **over-engineered / high-complexity** — functions/methods whose cyclomatic **or** cognitive
   complexity exceeds conservative thresholds.
+- **unhandled-route** — HTTP routes registered with no handler.
+- **stale-doc / swagger-drift** — endpoints documented in an OpenAPI/Swagger spec (JSON or YAML)
+  with no matching registered route (heuristic path matching; report-first).
 
 A graph connection failure never fails the scan; it's recorded in the report's `graph_error`
 field and the local findings are still returned.
@@ -225,8 +228,7 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
 
 - [x] Phase 0 — loader, bug/missing/modernize detectors, MCP stdio server, CLI
 - [x] Compose with a code graph — MCP **client** + a codebase-memory adapter; graph detectors:
-  **untested-exports**, **over-engineering** (complexity)
-- [ ] More graph detectors: stale-swagger, missing-handler
+  **untested-exports**, **over-engineering**, **missing-handler**, **stale-swagger**
 - [ ] `propose_fix` (emits a fix envelope; still report-first)
 - [ ] CI mode with a fix-envelope gate
 

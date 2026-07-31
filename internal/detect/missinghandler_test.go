@@ -8,7 +8,7 @@ import (
 )
 
 func TestRunMissingHandlers(t *testing.T) {
-	g := &graph.Fake{Routes: []graph.Route{
+	g := &graph.Fake{Unhandled: []graph.Route{
 		{Method: "GET", Path: "/widgets", QualifiedName: "__route__GET__/widgets"},
 	}}
 	fs, err := RunMissingHandlers(context.Background(), g)

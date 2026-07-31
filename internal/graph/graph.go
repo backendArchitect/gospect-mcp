@@ -42,4 +42,7 @@ type Graph interface {
 	// UnhandledRoutes returns HTTP routes (non-empty method) that have no incoming HANDLES edge.
 	// Routes carry no file path in the graph, so this is graph-wide (not scoped).
 	UnhandledRoutes(ctx context.Context) ([]Route, error)
+
+	// Routes returns all HTTP routes (non-empty method), graph-wide.
+	Routes(ctx context.Context) ([]Route, error)
 }

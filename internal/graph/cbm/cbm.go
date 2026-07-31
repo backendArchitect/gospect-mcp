@@ -156,6 +156,22 @@ func (c *Client) UnhandledRoutes(ctx context.Context) ([]graph.Route, error) {
 	return out, nil
 }
 
+// Routes returns all HTTP routes (non-empty method), graph-wide.
+func (c *Client) Routes(ctx context.Context) ([]graph.Route, error) {
+	all, err := c.query("MATCH (r:Route) RETURN r.qualified_name, r.name, r.method")
+	if err != nil {
+		return nil, err
+	}
+	var out []graph.Route
+	for _, row := range all.Rows {
+		if len(row) < 3 || row[2] == "" {
+			continue
+		}
+		out = append(out, graph.Route{Method: row[2], Path: row[1], QualifiedName: row[0]})
+	}
+	return out, nil
+}
+
 func atoi(s string) int {
 	n, _ := strconv.Atoi(s)
 	return n
