@@ -69,6 +69,23 @@ func TestHighComplexity_ThresholdAndLabels(t *testing.T) {
 	}
 }
 
+func TestUnhandledRoutes(t *testing.T) {
+	fc := &fakeCaller{byQuery: map[string]string{
+		// all routes: one handled HTTP, one unhandled HTTP, one gRPC (empty method)
+		"MATCH (r:Route) RETURN": `{"columns":["qn","name","method"],"rows":[["rt.GET./a","/a","GET"],["rt.POST./b","/b","POST"],["rt.ANY./svc","/svc",""]]}`,
+		// handled routes
+		"[:HANDLES]": `{"columns":["qn"],"rows":[["rt.GET./a"]]}`,
+	}}
+	routes, err := New(fc, "proj").UnhandledRoutes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// /a is handled, /svc has empty method -> only /b remains.
+	if len(routes) != 1 || routes[0].Path != "/b" || routes[0].Method != "POST" {
+		t.Fatalf("want only POST /b, got %+v", routes)
+	}
+}
+
 func TestCypherEscape(t *testing.T) {
 	if got := cypherEscape("a'b"); got != "a''b" {
 		t.Fatalf("cypherEscape: got %q", got)

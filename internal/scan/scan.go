@@ -88,6 +88,7 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 			func() ([]detect.Finding, error) {
 				return detect.RunOverEngineering(ctx, opt.Graph, scope, defaultMinCyclomatic, defaultMinCognitive)
 			},
+			func() ([]detect.Finding, error) { return detect.RunMissingHandlers(ctx, opt.Graph) },
 		}
 		for _, run := range graphRuns {
 			if fs, err := run(); err != nil {

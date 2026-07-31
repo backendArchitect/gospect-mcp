@@ -7,8 +7,11 @@ type Fake struct {
 	Untested    []Symbol
 	UntestedErr error
 
-	HotSpots    []HotSpot
-	HotSpotErr  error
+	HotSpots   []HotSpot
+	HotSpotErr error
+
+	Routes   []Route
+	RouteErr error
 }
 
 func (f *Fake) UntestedExports(ctx context.Context, scope string) ([]Symbol, error) {
@@ -17,4 +20,8 @@ func (f *Fake) UntestedExports(ctx context.Context, scope string) ([]Symbol, err
 
 func (f *Fake) HighComplexity(ctx context.Context, scope string, minCyclomatic, minCognitive int) ([]HotSpot, error) {
 	return f.HotSpots, f.HotSpotErr
+}
+
+func (f *Fake) UnhandledRoutes(ctx context.Context) ([]Route, error) {
+	return f.Routes, f.RouteErr
 }

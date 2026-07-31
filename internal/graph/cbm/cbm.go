@@ -122,6 +122,40 @@ func (c *Client) HighComplexity(ctx context.Context, scope string, minCyclomatic
 	return out, nil
 }
 
+// UnhandledRoutes returns HTTP routes (non-empty method) with no incoming HANDLES edge. Routes
+// have no file_path in the graph, so this is graph-wide; missing handlers are computed as a
+// set-difference (all routes − handled routes) keyed by qualified_name.
+func (c *Client) UnhandledRoutes(ctx context.Context) ([]graph.Route, error) {
+	all, err := c.query("MATCH (r:Route) RETURN r.qualified_name, r.name, r.method")
+	if err != nil {
+		return nil, err
+	}
+	handled, err := c.query("MATCH (h)-[:HANDLES]->(r:Route) RETURN DISTINCT r.qualified_name")
+	if err != nil {
+		return nil, err
+	}
+	handledSet := make(map[string]bool, len(handled.Rows))
+	for _, row := range handled.Rows {
+		if len(row) > 0 {
+			handledSet[row[0]] = true
+		}
+	}
+
+	var out []graph.Route
+	for _, row := range all.Rows {
+		if len(row) < 3 {
+			continue
+		}
+		qn, name, method := row[0], row[1], row[2]
+		// Skip non-HTTP routes (gRPC/external targets carry an empty method) and handled ones.
+		if method == "" || handledSet[qn] {
+			continue
+		}
+		out = append(out, graph.Route{Method: method, Path: name, QualifiedName: qn})
+	}
+	return out, nil
+}
+
 func atoi(s string) int {
 	n, _ := strconv.Atoi(s)
 	return n

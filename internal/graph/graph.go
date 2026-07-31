@@ -20,6 +20,13 @@ type HotSpot struct {
 	Cognitive  int
 }
 
+// Route is a registered HTTP route.
+type Route struct {
+	Method        string
+	Path          string
+	QualifiedName string
+}
+
 // Graph answers the whole-repo questions that single-package analysis can't.
 // More methods (Callers for reachability, Routes for swagger-drift) get added as the
 // graph-backed detectors land.
@@ -31,4 +38,8 @@ type Graph interface {
 	// HighComplexity returns non-test functions/methods under scope whose cyclomatic OR cognitive
 	// complexity meets the given minimums.
 	HighComplexity(ctx context.Context, scope string, minCyclomatic, minCognitive int) ([]HotSpot, error)
+
+	// UnhandledRoutes returns HTTP routes (non-empty method) that have no incoming HANDLES edge.
+	// Routes carry no file path in the graph, so this is graph-wide (not scoped).
+	UnhandledRoutes(ctx context.Context) ([]Route, error)
 }
