@@ -46,6 +46,13 @@ func (e *NotGoError) Error() string {
 // loads them all, so one `scan <monorepo>` covers every service. An explicit non-"./..." pattern
 // keeps single-module behavior.
 func Load(dir string, patterns ...string) ([]*packages.Package, Stats, error) {
+	return LoadWithProgress(dir, nil, patterns...)
+}
+
+// LoadWithProgress is Load with an optional progress callback, invoked before each module loads
+// (a monorepo has several) so a caller can stream reassurance during a slow cold compile. progress
+// may be nil.
+func LoadWithProgress(dir string, progress func(string), patterns ...string) ([]*packages.Package, Stats, error) {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
@@ -62,7 +69,10 @@ func Load(dir string, patterns ...string) ([]*packages.Package, Stats, error) {
 	var all []*packages.Package
 	var skipped []string
 	loaded := roots[:0:0] // module roots that actually loaded (excludes the skipped ones)
-	for _, root := range roots {
+	for i, root := range roots {
+		if progress != nil {
+			progress(fmt.Sprintf("loading module %d/%d: %s", i+1, len(roots), relDir(dir, root)))
+		}
 		cfg := &packages.Config{Mode: packages.LoadAllSyntax, Dir: root}
 		pkgs, err := packages.Load(cfg, patterns...)
 		if err != nil {
@@ -87,6 +97,18 @@ func Load(dir string, patterns ...string) ([]*packages.Package, Stats, error) {
 		stats.Errors += len(p.Errors)
 	})
 	return all, stats, nil
+}
+
+// relDir renders root relative to base for compact progress lines, falling back to root itself
+// (e.g. base is the module root, so root == base yields ".").
+func relDir(base, root string) string {
+	if rel, err := filepath.Rel(base, root); err == nil {
+		if rel == "." {
+			return filepath.Base(root)
+		}
+		return rel
+	}
+	return root
 }
 
 // firstLine collapses a multi-line loader error to its first line so skip reasons stay compact.

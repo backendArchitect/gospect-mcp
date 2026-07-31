@@ -39,55 +39,131 @@ import (
 )
 
 func main() {
-	if len(os.Args) >= 2 {
-		switch os.Args[1] {
-		case "version":
-			fmt.Println("gospect-mcp", selfupdate.Current())
-			return
-		case "update":
-			runSelfUpdate()
-			return
-		case "propose-fix":
-			runProposeFix()
-			return
-		case "uninstall":
-			runUninstall()
-			return
-		case "check":
-			runCheck()
-			return
-		case "scan":
-			// A bare `scan` with no path must NOT silently fall through to MCP server mode
-			// (which blocks on stdin and looks like a hang). Require a directory.
-			if len(os.Args) < 3 {
-				fmt.Fprintln(os.Stderr, "usage: gospect-mcp scan <dir> [patterns...]")
-				fmt.Fprintln(os.Stderr, "(run gospect-mcp with no arguments to start the MCP server)")
-				os.Exit(2)
-			}
-			// A valid scan continues to the handler below.
-		}
+	// No arguments = MCP server over stdio (how MCP hosts launch it). Every other invocation is a
+	// subcommand; an unrecognized one errors with usage rather than silently starting the server.
+	if len(os.Args) < 2 {
+		runServer()
+		return
+	}
+	switch os.Args[1] {
+	case "help", "-h", "--help":
+		printUsage(os.Stdout)
+	case "version", "--version":
+		fmt.Println("gospect-mcp", selfupdate.Current())
+	case "update":
+		runSelfUpdate()
+	case "propose-fix":
+		runProposeFix()
+	case "uninstall":
+		runUninstall()
+	case "check":
+		runCheck()
+	case "scan":
+		runScan()
+	default:
+		fmt.Fprintf(os.Stderr, "gospect-mcp: unknown command %q\n\n", os.Args[1])
+		printUsage(os.Stderr)
+		os.Exit(2)
+	}
+}
+
+// printUsage writes the top-level help. It goes to stdout for `help` and to stderr for errors.
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `gospect-mcp — report-first, Go-only code scanner (MCP server + CLI)
+
+Usage:
+  gospect-mcp                                    start the MCP server (stdio; default)
+  gospect-mcp scan  [flags] <dir> [patterns...]  scan a module or monorepo, print a JSON report
+  gospect-mcp check [flags] <dir> [patterns...]  CI gate: exit non-zero on findings at/above a severity
+  gospect-mcp propose-fix                        read a finding (JSON) on stdin, print a fix envelope
+  gospect-mcp version                            print the installed version
+  gospect-mcp update                             update to the latest release, if any
+  gospect-mcp uninstall                          remove the installed binary
+  gospect-mcp help                               show this help
+
+Flags (scan, check):
+  -verbose            stream per-module load + detector progress, and a summary, to stderr
+Flags (check):
+  -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
+  -ignore <a,b>       comma-separated detector names to skip
+  -format <fmt>       text|json (default text)
+
+Notes:
+  <dir> may be a single module or a monorepo root — every nested go.mod is scanned in one run.
+  Mark intentional code with a //gospect:ignore [detector...] comment to drop it from the report.
+
+Docs: https://github.com/backendArchitect/gospect-mcp
+`)
+}
+
+// runScan is the standalone CLI: scan a module/monorepo and print the JSON report. Flags precede
+// the positional args: `scan [flags] <dir> [patterns...]`.
+func runScan() {
+	fs := flag.NewFlagSet("scan", flag.ExitOnError)
+	verbose := fs.Bool("verbose", false, "stream load/detector progress and a summary to stderr")
+	_ = fs.Parse(os.Args[2:])
+
+	args := fs.Args()
+	if len(args) == 0 {
+		// A bare `scan` must NOT fall through to MCP server mode (which blocks on stdin and looks
+		// like a hang). Require a directory.
+		fmt.Fprintln(os.Stderr, "usage: gospect-mcp scan [flags] <dir> [patterns...]")
+		fmt.Fprintln(os.Stderr, "(run gospect-mcp with no arguments to start the MCP server)")
+		os.Exit(2)
 	}
 
 	ctx := context.Background()
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
 
-	// Standalone CLI mode for quick local use / testing.
-	if len(os.Args) >= 3 && os.Args[1] == "scan" {
-		fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", os.Args[2])
-		rep, err := scan.ScanWithOptions(os.Args[2], scan.Options{
-			Patterns: os.Args[3:], Graph: g, GraphScope: scope,
-		})
-		if err != nil {
-			exitScanError(err)
-		}
-		warnSkipped(rep)
-		out, _ := json.MarshalIndent(rep, "", "  ")
-		fmt.Println(string(out))
-		return
+	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", args[0])
+	rep, err := scan.ScanWithOptions(args[0], scan.Options{
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+	})
+	if err != nil {
+		exitScanError(err)
 	}
+	warnSkipped(rep)
+	if *verbose {
+		printScanSummary(rep)
+	}
+	out, _ := json.MarshalIndent(rep, "", "  ")
+	fmt.Println(string(out))
+}
 
-	// Default: MCP server over stdio.
+// progressFn returns a stderr progress printer when verbose, else nil (progress suppressed).
+func progressFn(verbose bool) func(string) {
+	if !verbose {
+		return nil
+	}
+	return func(m string) { fmt.Fprintln(os.Stderr, "gospect:", m) }
+}
+
+// printScanSummary writes a human-readable digest of the report to stderr (verbose mode); the
+// machine-readable JSON still goes to stdout untouched.
+func printScanSummary(rep *scan.Report) {
+	fmt.Fprintf(os.Stderr, "gospect: %d finding(s) across %d package(s) / %d module(s); load %dms, scan %dms",
+		rep.FindingCount, rep.PackagesLoaded, rep.ModulesLoaded, rep.LoadMillis, rep.ScanMillis)
+	if rep.Suppressed > 0 {
+		fmt.Fprintf(os.Stderr, "; %d suppressed", rep.Suppressed)
+	}
+	fmt.Fprintln(os.Stderr)
+	cats := make([]string, 0, len(rep.ByCategory))
+	for c := range rep.ByCategory {
+		cats = append(cats, c)
+	}
+	sort.Strings(cats)
+	for _, c := range cats {
+		fmt.Fprintf(os.Stderr, "  %-16s %d\n", c, rep.ByCategory[c])
+	}
+}
+
+// runServer starts the MCP stdio server.
+func runServer() {
+	ctx := context.Background()
+	g, cleanup, scope := buildGraph(ctx)
+	defer cleanup()
+
 	srv := mcp.NewServer("gospect-mcp", selfupdate.Current())
 	srv.Register(mcp.Tool{
 		Name:        "scan",
@@ -207,6 +283,7 @@ func runCheck() {
 	failOn := fs.String("fail-on", "high", "minimum severity that fails the check: high|medium|low")
 	format := fs.String("format", "text", "output format: text|json")
 	ignore := fs.String("ignore", "", "comma-separated detector names to ignore")
+	verbose := fs.Bool("verbose", false, "stream load/detector progress to stderr")
 	_ = fs.Parse(os.Args[2:])
 
 	args := fs.Args()
@@ -220,7 +297,9 @@ func runCheck() {
 	defer cleanup()
 
 	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
-	rep, err := scan.ScanWithOptions(args[0], scan.Options{Patterns: args[1:], Graph: g, GraphScope: scope})
+	rep, err := scan.ScanWithOptions(args[0], scan.Options{
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+	})
 	if err != nil {
 		exitScanError(err)
 	}

@@ -4,6 +4,7 @@ package scan
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -23,8 +24,9 @@ const (
 // detectors run and gospect works fully standalone.
 type Options struct {
 	Patterns   []string
-	Graph      graph.Graph // optional code-intelligence graph (e.g. codebase-memory-mcp)
-	GraphScope string      // file-path substring used to scope graph queries
+	Graph      graph.Graph  // optional code-intelligence graph (e.g. codebase-memory-mcp)
+	GraphScope string       // file-path substring used to scope graph queries
+	Progress   func(string) // optional; called with human-readable progress lines (verbose mode)
 }
 
 // Report is the report-only output of a scan.
@@ -56,10 +58,16 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	pkgs, stats, err := loader.Load(dir, patterns...)
+	progress := opt.Progress
+	if progress == nil {
+		progress = func(string) {} // no-op keeps the call sites clean
+	}
+	pkgs, stats, err := loader.LoadWithProgress(dir, opt.Progress, patterns...)
 	if err != nil {
 		return nil, err
 	}
+	progress(fmt.Sprintf("loaded %d package(s) across %d module(s) in %dms; running detectors…",
+		stats.Packages, len(stats.Roots), stats.Duration.Milliseconds()))
 
 	start := time.Now()
 	var findings []detect.Finding
@@ -93,6 +101,7 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	// local scan, since the local findings are valuable on their own.
 	var graphErr string
 	if opt.Graph != nil {
+		progress("running graph-backed detectors…")
 		ctx := context.Background()
 		scope := opt.GraphScope
 		if scope == "" {
