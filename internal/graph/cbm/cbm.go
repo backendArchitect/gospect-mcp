@@ -81,15 +81,50 @@ func (c *Client) UntestedExports(ctx context.Context, scope string) ([]graph.Sym
 		if len(row) < 4 || testedSet[row[0]] {
 			continue
 		}
-		line, _ := strconv.Atoi(row[3])
 		out = append(out, graph.Symbol{
 			QualifiedName: row[0],
 			Name:          row[1],
 			File:          row[2],
-			Line:          line,
+			Line:          atoi(row[3]),
 		})
 	}
 	return out, nil
+}
+
+// HighComplexity returns non-test functions/methods under scope whose cyclomatic OR cognitive
+// complexity meets the minimums. The metrics are stored as strings and this dialect has no
+// toInteger(), so we fetch and threshold in Go.
+func (c *Client) HighComplexity(ctx context.Context, scope string, minCyclomatic, minCognitive int) ([]graph.HotSpot, error) {
+	s := cypherEscape(scope)
+	var out []graph.HotSpot
+	for _, label := range []string{"Function", "Method"} {
+		qr, err := c.query(fmt.Sprintf(
+			"MATCH (f:%s) WHERE f.is_test = 'false' AND f.file_path CONTAINS '%s' "+
+				"RETURN f.qualified_name, f.name, f.file_path, f.start_line, f.complexity, f.cognitive", label, s))
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range qr.Rows {
+			if len(row) < 6 {
+				continue
+			}
+			cyc, cog := atoi(row[4]), atoi(row[5])
+			if cyc < minCyclomatic && cog < minCognitive {
+				continue
+			}
+			out = append(out, graph.HotSpot{
+				Symbol:     graph.Symbol{QualifiedName: row[0], Name: row[1], File: row[2], Line: atoi(row[3])},
+				Cyclomatic: cyc,
+				Cognitive:  cog,
+			})
+		}
+	}
+	return out, nil
+}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }
 
 // cypherEscape neutralizes single quotes so a scope substring can't break out of the string literal.

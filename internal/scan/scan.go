@@ -12,6 +12,13 @@ import (
 	"github.com/backendArchitect/gospect-mcp/internal/loader"
 )
 
+// Complexity thresholds for the graph-backed over-engineering detector. Conservative so it flags
+// genuinely gnarly functions, not merely large ones.
+const (
+	defaultMinCyclomatic = 20
+	defaultMinCognitive  = 30
+)
+
 // Options configures a scan. Graph is optional: when nil, only the local (single-package)
 // detectors run and gospect works fully standalone.
 type Options struct {
@@ -71,14 +78,25 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	// local scan, since the local findings are valuable on their own.
 	var graphErr string
 	if opt.Graph != nil {
+		ctx := context.Background()
 		scope := opt.GraphScope
 		if scope == "" {
 			scope = dir
 		}
-		if fs, err := detect.RunUntestedExports(context.Background(), opt.Graph, scope); err != nil {
-			graphErr = err.Error()
-		} else {
-			findings = append(findings, fs...)
+		graphRuns := []func() ([]detect.Finding, error){
+			func() ([]detect.Finding, error) { return detect.RunUntestedExports(ctx, opt.Graph, scope) },
+			func() ([]detect.Finding, error) {
+				return detect.RunOverEngineering(ctx, opt.Graph, scope, defaultMinCyclomatic, defaultMinCognitive)
+			},
+		}
+		for _, run := range graphRuns {
+			if fs, err := run(); err != nil {
+				if graphErr == "" {
+					graphErr = err.Error()
+				}
+			} else {
+				findings = append(findings, fs...)
+			}
 		}
 	}
 

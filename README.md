@@ -113,9 +113,13 @@ export GOSPECT_GRAPH_SCOPE="internal/"            # optional file-path substring
 gospect-mcp scan /path/to/module
 ```
 
-When configured, the report gains graph-backed findings (currently **untested-exports** —
-exported functions with no test). A graph connection failure never fails the scan; it's recorded
-in the report's `graph_error` field and the local findings are still returned.
+When configured, the report gains graph-backed findings:
+- **untested-exports** — exported functions with no incoming test.
+- **over-engineered / high-complexity** — functions/methods whose cyclomatic **or** cognitive
+  complexity exceeds conservative thresholds.
+
+A graph connection failure never fails the scan; it's recorded in the report's `graph_error`
+field and the local findings are still returned.
 
 ## The `scan` tool
 
@@ -200,9 +204,9 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
 ## Roadmap
 
 - [x] Phase 0 — loader, bug/missing/modernize detectors, MCP stdio server, CLI
-- [x] Compose with a code graph — MCP **client** + a codebase-memory adapter; first graph-backed
-  detector: **untested-exports**
-- [ ] More graph detectors: over-engineering, stale-swagger, missing-handler
+- [x] Compose with a code graph — MCP **client** + a codebase-memory adapter; graph detectors:
+  **untested-exports**, **over-engineering** (complexity)
+- [ ] More graph detectors: stale-swagger, missing-handler
 - [ ] `propose_fix` (emits a fix envelope; still report-first)
 - [ ] CI mode with a fix-envelope gate
 

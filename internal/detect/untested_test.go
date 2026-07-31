@@ -26,7 +26,7 @@ func TestRunUntestedExports(t *testing.T) {
 }
 
 func TestRunUntestedExports_PropagatesError(t *testing.T) {
-	g := &graph.Fake{Err: errors.New("graph down")}
+	g := &graph.Fake{UntestedErr: errors.New("graph down")}
 	if _, err := RunUntestedExports(context.Background(), g, "pkg"); err == nil {
 		t.Fatal("expected error to propagate")
 	}

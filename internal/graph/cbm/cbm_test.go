@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/backendArchitect/gospect-mcp/internal/graph"
 )
 
 // fakeCaller returns canned query_graph JSON, matched by a substring of the Cypher. It mirrors
@@ -38,6 +40,32 @@ func TestUntestedExports_SetDifference(t *testing.T) {
 	}
 	if syms[0].Name != "A" || syms[0].QualifiedName != "pkg.A" || syms[0].File != "a.go" || syms[0].Line != 10 {
 		t.Fatalf("unexpected symbol: %+v", syms[0])
+	}
+}
+
+func TestHighComplexity_ThresholdAndLabels(t *testing.T) {
+	fc := &fakeCaller{byQuery: map[string]string{
+		// Function label: one over, one under threshold
+		"(f:Function)": `{"columns":["qn","name","file","line","cyc","cog"],"rows":[["p.Big","Big","a.go","5","30","10"],["p.Small","Small","a.go","40","3","2"]]}`,
+		// Method label: one over on cognitive only
+		"(f:Method)": `{"columns":["qn","name","file","line","cyc","cog"],"rows":[["p.M","M","b.go","7","1","40"]]}`,
+	}}
+	spots, err := New(fc, "proj").HighComplexity(context.Background(), "scope", 20, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spots) != 2 {
+		t.Fatalf("want 2 hotspots (Big + M), got %d: %+v", len(spots), spots)
+	}
+	byName := map[string]graph.HotSpot{}
+	for _, s := range spots {
+		byName[s.Name] = s
+	}
+	if byName["Big"].Cyclomatic != 30 || byName["M"].Cognitive != 40 {
+		t.Fatalf("unexpected metrics: %+v", spots)
+	}
+	if _, ok := byName["Small"]; ok {
+		t.Fatal("Small is under both thresholds and should be excluded")
 	}
 }
 
