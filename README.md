@@ -1,70 +1,192 @@
 # gospect-mcp
 
-A **Go-only, report-first** code scanner exposed as an **MCP server**. It indexes a Go
-module, runs deterministic analyzers, and **reports** findings. It never modifies code —
-fixes are a separate, explicitly-invoked step (not yet implemented).
+![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8?logo=go&logoColor=white)
+![License](https://img.shields.io/badge/License-GPL--3.0-green)
+![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)
+![Status](https://img.shields.io/badge/status-phase--0-yellow)
 
-Design doc: see the project design notes. Key principles:
+**A Go-only, report-first code scanner exposed as an MCP server.** It indexes a Go module,
+runs deterministic analyzers, and **reports** genuine bugs, dead code, stale docs and outdated
+APIs. It **never modifies your code** — fixes are a separate, explicitly-invoked step.
 
-- **Sensor, not oracle.** The server runs deterministic Go tooling and emits findings with
-  evidence. The connecting MCP host (Claude Code, or any MCP-capable agent) supplies any AI.
-  The server itself uses **no LLM** and detects **no** installed AI.
-- **Report-first.** Default output is a report. Fixes only on explicit request.
-- **Universal.** Works on any Go module where `go build ./...` succeeds.
+Think of it as an *MRI for your Go code*: a deep, non-invasive scan that produces a diagnosis
+your editor or AI agent acts on — not a tool that silently rewrites things.
 
-## Status — Phase 0 (walking skeleton)
+---
 
-Working today:
-- `go/packages` loader (the risky core) with load stats.
-- Deterministic detectors, report-only:
-  - **bug** — `nilness`, `lostcancel`, `httpresponse`, `unmarshal`, `copylock`, `errorsas`,
-    `nilfunc`, `unreachable` (all via `golang.org/x/tools`, no extra deps).
-  - **missing** — unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers,
-    unchecked error returns (errcheck-lite, with fmt-printer exclusion).
-  - **modernize** — outdated `go.mod` go directive; `loopclosure` (pre-1.22 loop-var capture).
-- Findings carry `category`, `detector`, `severity`, `file:line`, `message`; the report includes a
-  `by_category` summary.
-- Minimal MCP server over stdio (hand-rolled JSON-RPC, no SDK dependency): `initialize`,
-  `tools/list`, `tools/call`. A `scan` tool + a standalone CLI mode.
+## Quick start
 
-Planned (per design): over-engineering + stale-swagger + untested-exports + routes-with-no-handler
-(via codebase-memory composition), deprecated-API detection, `propose_fix` (envelope only), CI mode.
-
-## Run
-
-Standalone CLI (prints a JSON report):
+Install the latest version straight from source (needs Go 1.21+):
 
 ```sh
-go run . scan /path/to/go/module ./...
+go install github.com/backendArchitect/gospect-mcp@latest
 ```
 
-As an MCP server over stdio (a host connects and calls the `scan` tool):
+This drops a `gospect-mcp` binary in your `$GOBIN` (usually `~/go/bin` — make sure it's on your
+`PATH`). Then scan any Go module:
 
 ```sh
-go run .
+gospect-mcp scan /path/to/your/module ./...
 ```
 
-Example MCP client config (Claude Code):
+You'll get a JSON report of findings. That's it — no config, no services, no code changes.
+
+> Prefer building it yourself? See [From source](#from-source).
+
+---
+
+## Why gospect-mcp
+
+- **Report-first.** The default output is a *report*. It will not touch your code. Fixes only
+  happen when you explicitly ask for them.
+- **Sensor, not oracle.** The server runs pure Go tooling and emits findings with evidence. It
+  uses **no LLM** and detects **no** installed AI — the MCP host you connect it to (Claude Code,
+  Cursor, any MCP client) supplies the intelligence. That makes it model- and vendor-agnostic.
+- **Genuine over noisy.** It builds on the real Go toolchain (`go/packages`, `go/analysis`,
+  SSA) so candidates are semantically backed, not grep guesses.
+- **Universal.** Works on any Go module where `go build ./...` succeeds — single- or
+  multi-module.
+
+---
+
+## Use it from your AI agent (MCP)
+
+`gospect-mcp` speaks the Model Context Protocol over stdio. Point any MCP host at the binary.
+
+**Claude Code**
+
+```sh
+claude mcp add gospect gospect-mcp
+```
+
+**Manual config** (`~/.claude.json`, a project `.mcp.json`, Claude Desktop, Cursor, etc.):
 
 ```json
 {
   "mcpServers": {
-    "gospect-mcp": { "command": "gospect-mcp" }
+    "gospect": {
+      "command": "gospect-mcp",
+      "args": []
+    }
   }
 }
 ```
 
+Then ask your agent to scan a module. It calls the `scan` tool and reasons over the report —
+and, because the server is report-only, it can't change your code unless you tell it to.
+
+---
+
+## What it detects
+
+All detectors are deterministic and report-only. Findings carry `category`, `detector`,
+`severity`, `file:line`, and `message`; the report includes a `by_category` summary.
+
+| Category | Detectors |
+|---|---|
+| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable` |
+| **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers, unchecked error returns (errcheck-lite) |
+| **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
+
+Built entirely on `golang.org/x/tools` — no heavyweight dependencies.
+
+**Planned** (see the design notes): over-engineering, stale swagger/OpenAPI vs. routes,
+untested exported code, routes-with-no-handler, deprecated-API detection, and a `propose_fix`
+tool that emits a *fix envelope* (still never applies code) — all via optional composition with
+a code graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp).
+
+---
+
 ## The `scan` tool
 
-Input: `{ "path": "<module dir>", "patterns": ["./..."] }` (patterns optional).
-Output: a JSON `Report` — load stats + a flat list of `Finding`s (category, detector,
-severity, file, line, message). No mutations.
+**Input**
 
-## Test
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `path` | string | ✅ | — | filesystem dir of the Go module |
+| `patterns` | string[] | | `["./..."]` | package patterns to scan |
+
+**Output** — a JSON `Report`: load stats + a flat, sorted list of `Finding`s. No mutations.
+
+### Example
 
 ```sh
-go test ./...
+gospect-mcp scan ./testdata/buggy
 ```
 
-`testdata/buggy` is a separate module with a deliberate nil dereference; the test confirms
-the scanner loads it and `nilness` reports the bug.
+```json
+{
+  "path": "./testdata/buggy",
+  "packages_loaded": 1,
+  "load_errors": 0,
+  "load_millis": 8,
+  "finding_count": 5,
+  "by_category": { "bug": 1, "missing": 3, "modernize": 1 },
+  "findings": [
+    {
+      "category": "bug",
+      "detector": "nilness",
+      "severity": "high",
+      "file": ".../buggy.go",
+      "line": 8,
+      "message": "nil dereference in load"
+    },
+    {
+      "category": "missing",
+      "detector": "unchecked-error",
+      "severity": "medium",
+      "file": ".../stubs.go",
+      "line": 14,
+      "message": "error return value is not checked"
+    }
+  ]
+}
+```
+
+---
+
+## How it works
+
+```
+  Go module ──► go/packages (load + type-check) ──► detectors ──► Report (JSON)
+                     the risky core                  bug / missing / modernize
+```
+
+1. **Load** the target packages with full types + syntax via `go/packages`.
+2. **Detect** — run curated `go/analysis` passes plus lightweight AST checks. Each diagnostic
+   becomes a `Finding`.
+3. **Report** — aggregate, de-dupe, sort, summarize. Never edit.
+
+The MCP layer is a hand-rolled JSON-RPC 2.0 stdio server (`initialize`, `tools/list`,
+`tools/call`) — no SDK dependency.
+
+---
+
+## From source
+
+```sh
+git clone git@github.com:backendArchitect/gospect-mcp.git
+cd gospect-mcp
+go build -o gospect-mcp .     # build the binary
+go test ./...                 # run the tests
+./gospect-mcp scan ./testdata/buggy
+```
+
+`testdata/buggy` is a separate module with deliberate issues (a nil-deref, a stub, a TODO, an
+unchecked error, an old `go.mod`) that the test suite asserts each detector catches.
+
+---
+
+## Roadmap
+
+- [x] Phase 0 — loader, bug/missing/modernize detectors, MCP stdio server, CLI
+- [ ] Compose with a code graph for reachability, routes, and test coverage
+- [ ] Over-engineering + stale-swagger + untested-exports + missing-handler detectors
+- [ ] `propose_fix` (emits a fix envelope; still report-first)
+- [ ] CI mode with a fix-envelope gate
+
+---
+
+## License
+
+[GPL-3.0](LICENSE).
