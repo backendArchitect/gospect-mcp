@@ -18,14 +18,17 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/fix"
+	"github.com/backendArchitect/gospect-mcp/internal/gate"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
 	"github.com/backendArchitect/gospect-mcp/internal/mcp"
@@ -47,6 +50,9 @@ func main() {
 			return
 		case "uninstall":
 			runUninstall()
+			return
+		case "check":
+			runCheck()
 			return
 		}
 	}
@@ -156,6 +162,80 @@ func envelopeJSON(raw []byte) (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+// runCheck is the CI-gate mode: scan, then exit non-zero if any finding is at/above the
+// configured severity. Flags must precede the positional args: `check [flags] <dir> [patterns...]`.
+func runCheck() {
+	fs := flag.NewFlagSet("check", flag.ExitOnError)
+	failOn := fs.String("fail-on", "high", "minimum severity that fails the check: high|medium|low")
+	format := fs.String("format", "text", "output format: text|json")
+	ignore := fs.String("ignore", "", "comma-separated detector names to ignore")
+	_ = fs.Parse(os.Args[2:])
+
+	args := fs.Args()
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: gospect-mcp check [flags] <dir> [patterns...]")
+		os.Exit(2)
+	}
+
+	ctx := context.Background()
+	g, cleanup, scope := buildGraph(ctx)
+	defer cleanup()
+
+	rep, err := scan.ScanWithOptions(args[0], scan.Options{Patterns: args[1:], Graph: g, GraphScope: scope})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "scan error:", err)
+		os.Exit(2)
+	}
+
+	ignoreSet := map[string]bool{}
+	for _, d := range strings.Split(*ignore, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			ignoreSet[d] = true
+		}
+	}
+	result := gate.Evaluate(rep.Findings, gate.Policy{FailOn: *failOn, Ignore: ignoreSet})
+
+	if *format == "json" {
+		out, _ := json.MarshalIndent(map[string]any{
+			"pass": result.Pass(), "fail_on": *failOn, "blocking": result.Blocking, "report": rep,
+		}, "", "  ")
+		fmt.Println(string(out))
+	} else {
+		printCheckSummary(rep, result, *failOn)
+	}
+	if !result.Pass() {
+		os.Exit(1)
+	}
+}
+
+func printCheckSummary(rep *scan.Report, result gate.Result, failOn string) {
+	fmt.Printf("gospect check: %d findings in %s\n", rep.FindingCount, rep.Path)
+	cats := make([]string, 0, len(rep.ByCategory))
+	for c := range rep.ByCategory {
+		cats = append(cats, c)
+	}
+	sort.Strings(cats)
+	for _, c := range cats {
+		fmt.Printf("  %-16s %d\n", c, rep.ByCategory[c])
+	}
+	if rep.GraphError != "" {
+		fmt.Printf("  (graph detectors skipped: %s)\n", rep.GraphError)
+	}
+
+	if result.Pass() {
+		fmt.Printf("PASS — no findings at or above %q severity.\n", failOn)
+		return
+	}
+	fmt.Printf("\nFAIL — %d finding(s) at or above %q severity:\n", len(result.Blocking), failOn)
+	for _, f := range result.Blocking {
+		loc := f.File
+		if f.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+		}
+		fmt.Printf("  [%s] %s (%s) %s\n", f.Severity, f.Detector, loc, f.Message)
+	}
 }
 
 // runUninstall removes the installed gospect-mcp binary from this machine.

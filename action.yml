@@ -1,0 +1,44 @@
+name: gospect-mcp
+description: "Report-first Go code scanner — fail CI on findings at or above a severity threshold."
+branding:
+  icon: search
+  color: purple
+
+inputs:
+  path:
+    description: "Module directory to scan"
+    required: false
+    default: "."
+  patterns:
+    description: "Package patterns to scan"
+    required: false
+    default: "./..."
+  fail-on:
+    description: "Minimum severity that fails the check: high | medium | low"
+    required: false
+    default: "high"
+  ignore:
+    description: "Comma-separated detector names to ignore"
+    required: false
+    default: ""
+  version:
+    description: "gospect-mcp version to install (latest | vX.Y.Z | main)"
+    required: false
+    default: "latest"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: stable
+    - name: Install gospect-mcp
+      shell: bash
+      run: go install github.com/backendArchitect/gospect-mcp@${{ inputs.version }}
+    - name: gospect check
+      shell: bash
+      run: |
+        gospect-mcp check \
+          -fail-on "${{ inputs.fail-on }}" \
+          ${{ inputs.ignore && format('-ignore {0}', inputs.ignore) || '' }} \
+          "${{ inputs.path }}" ${{ inputs.patterns }}

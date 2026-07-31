@@ -190,6 +190,38 @@ gospect-mcp scan ./testdata/buggy
 
 ---
 
+## Use it in CI (gate on findings)
+
+`gospect-mcp check` scans and exits **non-zero** when any finding is at or above a severity —
+so a PR fails if it introduces (say) a nil dereference.
+
+```sh
+gospect-mcp check -fail-on high .          # exit 1 if any high-severity finding
+gospect-mcp check -fail-on medium -ignore todo,go-version ./...
+gospect-mcp check -format json .           # machine-readable
+```
+
+Flags go **before** the path: `check [flags] <dir> [patterns...]`. Exit codes: `0` clean,
+`1` blocking findings, `2` error.
+
+Drop-in GitHub Action:
+
+```yaml
+- uses: backendArchitect/gospect-mcp@v1
+  with:
+    path: .
+    fail-on: high      # high | medium | low
+    # ignore: todo,go-version
+```
+
+Or run it directly:
+
+```yaml
+- run: |
+    go install github.com/backendArchitect/gospect-mcp@latest
+    gospect-mcp check -fail-on high .
+```
+
 ## The `propose_fix` tool (report-first)
 
 Fixes are opt-in and separate from scanning. `propose_fix` takes a finding and returns a **fix
@@ -251,7 +283,7 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
   **untested-exports**, **over-engineering**, **missing-handler**, **stale-swagger**
 - [x] `propose_fix` — emits a fix envelope (root cause, verify-first, scope, ponytail
   constraints); never edits code
-- [ ] gospect-as-CI-gate mode (block a PR on findings; enforce the fix envelope)
+- [x] CI-gate mode — `gospect-mcp check` (severity threshold, exit codes) + a composite GitHub Action
 
 ---
 
