@@ -83,10 +83,18 @@ Usage:
 
 Flags (scan, check):
   -verbose            stream per-module load + detector progress, and a summary, to stderr
+  -min-severity <s>   keep only findings at/above a severity: low|medium|high
+  -category <a,b>     keep only these categories (e.g. bug,missing)
+  -detector <a,b>     keep only these detectors (e.g. nilness)
+  -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
+Flags (scan):
+  -format <fmt>       json|text (default json)
 Flags (check):
   -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
   -ignore <a,b>       comma-separated detector names to skip
   -format <fmt>       text|json (default text)
+
+Findings are ordered by importance: bugs (high severity) first, then medium, then low.
 
 Notes:
   <dir> may be a single module or a monorepo root — every nested go.mod is scanned in one run.
@@ -101,6 +109,8 @@ Docs: https://github.com/backendArchitect/gospect-mcp
 func runScan() {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	verbose := fs.Bool("verbose", false, "stream load/detector progress and a summary to stderr")
+	format := fs.String("format", "json", "output format: json|text")
+	filter := addFilterFlags(fs)
 	_ = fs.Parse(os.Args[2:])
 
 	args := fs.Args()
@@ -124,11 +134,65 @@ func runScan() {
 		exitScanError(err)
 	}
 	warnSkipped(rep)
+	if removed := rep.Apply(filter()); removed > 0 {
+		fmt.Fprintf(os.Stderr, "gospect: %d finding(s) filtered out by flags\n", removed)
+	}
 	if *verbose {
 		printScanSummary(rep)
 	}
+	if *format == "text" {
+		printFindingsText(rep)
+		return
+	}
 	out, _ := json.MarshalIndent(rep, "", "  ")
 	fmt.Println(string(out))
+}
+
+// addFilterFlags registers the shared output-filter flags on fs and returns a closure that builds
+// the FilterOptions after parsing. Used by both scan and check.
+func addFilterFlags(fs *flag.FlagSet) func() scan.FilterOptions {
+	minSev := fs.String("min-severity", "", "keep only findings at/above this severity: low|medium|high")
+	cats := fs.String("category", "", "keep only these comma-separated categories (e.g. bug,missing)")
+	dets := fs.String("detector", "", "keep only these comma-separated detectors (e.g. nilness)")
+	exclude := fs.String("exclude", "", "drop findings whose file path matches any comma-separated glob/substring (e.g. *.pb.go,/mocks/)")
+	return func() scan.FilterOptions {
+		return scan.FilterOptions{
+			MinSeverity: strings.TrimSpace(*minSev),
+			Categories:  splitCSV(*cats),
+			Detectors:   splitCSV(*dets),
+			ExcludeGlob: splitCSV(*exclude),
+		}
+	}
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// printFindingsText renders a report as a human-readable, grouped listing (bugs first, per the
+// report's own ordering).
+func printFindingsText(rep *scan.Report) {
+	fmt.Printf("gospect: %d finding(s) in %s (%d package(s), %d module(s))\n",
+		rep.FindingCount, rep.Path, rep.PackagesLoaded, rep.ModulesLoaded)
+	if rep.Suppressed > 0 {
+		fmt.Printf("  (%d suppressed via //gospect:ignore)\n", rep.Suppressed)
+	}
+	if rep.GraphError != "" {
+		fmt.Printf("  (graph detectors skipped: %s)\n", rep.GraphError)
+	}
+	for _, f := range rep.Findings {
+		loc := f.File
+		if f.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+		}
+		fmt.Printf("  [%-6s] %-16s %s\n           %s\n", f.Severity, f.Detector, loc, f.Message)
+	}
 }
 
 // progressFn returns a stderr progress printer when verbose, else nil (progress suppressed).
@@ -284,6 +348,7 @@ func runCheck() {
 	format := fs.String("format", "text", "output format: text|json")
 	ignore := fs.String("ignore", "", "comma-separated detector names to ignore")
 	verbose := fs.Bool("verbose", false, "stream load/detector progress to stderr")
+	filter := addFilterFlags(fs)
 	_ = fs.Parse(os.Args[2:])
 
 	args := fs.Args()
@@ -304,6 +369,9 @@ func runCheck() {
 		exitScanError(err)
 	}
 	warnSkipped(rep)
+	if removed := rep.Apply(filter()); removed > 0 {
+		fmt.Fprintf(os.Stderr, "gospect: %d finding(s) filtered out by flags\n", removed)
+	}
 
 	ignoreSet := map[string]bool{}
 	for _, d := range strings.Split(*ignore, ",") {

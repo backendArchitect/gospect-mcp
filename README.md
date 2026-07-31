@@ -31,8 +31,8 @@ This drops a `gospect-mcp` binary in your `$GOBIN` (usually `~/go/bin` — make 
 gospect-mcp scan /path/to/your/module ./...
 ```
 
-You'll get a JSON report of findings. That's it — no config, no services, no code changes. Run
-`gospect-mcp help` for the full command and flag list.
+You'll get a JSON report of findings, **ordered by importance — bugs first**, then medium, then low.
+That's it — no config, no services, no code changes. Run `gospect-mcp help` for every command and flag.
 
 Add `-verbose` to watch a long scan work (per-module load progress + a summary, all on stderr; the
 JSON on stdout is unchanged):
@@ -40,6 +40,23 @@ JSON on stdout is unchanged):
 ```sh
 gospect-mcp scan -verbose /path/to/monorepo
 ```
+
+### Cutting the noise (filters + text output)
+
+A big repo can surface hundreds of findings. Narrow the output — the same flags work on `scan` and
+`check`:
+
+```sh
+gospect-mcp scan -format text -min-severity high .      # readable, only the serious stuff
+gospect-mcp scan -category bug .                        # just bugs
+gospect-mcp scan -detector nilness,unmarshal .          # specific detectors
+gospect-mcp scan -exclude '*.pb.go,mocks/' .            # skip generated code / mocks
+```
+
+- `-min-severity low|medium|high` — drop everything below the given severity.
+- `-category a,b` / `-detector a,b` — keep only those categories/detectors.
+- `-exclude glob,glob` — drop findings whose file path matches a glob or substring.
+- `-format text` (scan) — a readable grouped listing instead of JSON.
 
 > **Speed & gotchas.** `scan` requires a path — `gospect-mcp scan` *alone* starts the MCP server
 > (it waits on stdin, which can look like a hang). A whole large module scans in a few seconds

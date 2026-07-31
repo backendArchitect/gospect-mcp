@@ -152,8 +152,16 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	}, nil
 }
 
+// sortFindings orders the report by importance so the most actionable issues are on top: highest
+// severity first, then category priority (bugs above everything), then file:line for stable output.
 func sortFindings(fs []detect.Finding) {
 	sort.Slice(fs, func(i, j int) bool {
+		if a, b := severityRank(fs[i].Severity), severityRank(fs[j].Severity); a != b {
+			return a > b // high severity first
+		}
+		if a, b := categoryRank(fs[i].Category), categoryRank(fs[j].Category); a != b {
+			return a < b // bugs before missing/modernize/etc.
+		}
 		if fs[i].File != fs[j].File {
 			return fs[i].File < fs[j].File
 		}
@@ -165,4 +173,37 @@ func sortFindings(fs []detect.Finding) {
 		}
 		return fs[i].Detector < fs[j].Detector
 	})
+}
+
+// severityRank maps a severity to a sortable weight (higher = more urgent). Unknown → 0.
+func severityRank(s string) int {
+	switch s {
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// categoryRank orders categories by how directly they signal a defect (lower sorts first). Unknown
+// categories sort after the known ones but before none.
+func categoryRank(c string) int {
+	switch c {
+	case "bug":
+		return 0
+	case "over-engineered":
+		return 1
+	case "stale-doc":
+		return 2
+	case "missing":
+		return 3
+	case "modernize":
+		return 4
+	default:
+		return 5
+	}
 }
