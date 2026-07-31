@@ -54,6 +54,15 @@ func main() {
 		case "check":
 			runCheck()
 			return
+		case "scan":
+			// A bare `scan` with no path must NOT silently fall through to MCP server mode
+			// (which blocks on stdin and looks like a hang). Require a directory.
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: gospect-mcp scan <dir> [patterns...]")
+				fmt.Fprintln(os.Stderr, "(run gospect-mcp with no arguments to start the MCP server)")
+				os.Exit(2)
+			}
+			// A valid scan continues to the handler below.
 		}
 	}
 
@@ -63,6 +72,7 @@ func main() {
 
 	// Standalone CLI mode for quick local use / testing.
 	if len(os.Args) >= 3 && os.Args[1] == "scan" {
+		fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", os.Args[2])
 		rep, err := scan.ScanWithOptions(os.Args[2], scan.Options{
 			Patterns: os.Args[3:], Graph: g, GraphScope: scope,
 		})
@@ -183,6 +193,7 @@ func runCheck() {
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
 
+	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{Patterns: args[1:], Graph: g, GraphScope: scope})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "scan error:", err)

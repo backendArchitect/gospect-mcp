@@ -33,6 +33,11 @@ gospect-mcp scan /path/to/your/module ./...
 
 You'll get a JSON report of findings. That's it — no config, no services, no code changes.
 
+> **Speed & gotchas.** `scan` requires a path — `gospect-mcp scan` *alone* starts the MCP server
+> (it waits on stdin, which can look like a hang). A whole large module scans in a few seconds
+> (e.g. ~270 packages in ~5s), but the **first** scan of a big repo may take longer while Go
+> compiles its dependencies once — subsequent scans are fast. Progress is printed to stderr.
+
 > Prefer building it yourself? See [From source](#from-source).
 
 ### Keeping up to date

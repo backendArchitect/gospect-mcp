@@ -17,9 +17,9 @@ type Stats struct {
 }
 
 // Load type-checks the packages matching patterns under dir. LoadAllSyntax pulls in
-// syntax + types + deps, which the analysis drivers require. A load error (e.g. the
-// module doesn't build) is returned; per-package errors are counted, not fatal, so a
-// partially-broken repo still yields findings for the parts that do type-check.
+// syntax + types + deps, which the analysis drivers require (the lighter export-data mode makes
+// SSA/ctrlflow-based analyzers panic). A load error (e.g. the module doesn't build) is returned;
+// per-package errors are counted, not fatal, so a partially-broken repo still yields findings.
 func Load(dir string, patterns ...string) ([]*packages.Package, Stats, error) {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
