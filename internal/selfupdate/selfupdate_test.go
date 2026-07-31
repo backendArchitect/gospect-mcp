@@ -4,8 +4,32 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func TestUninstallRemovesFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "gospect-mcp")
+	if err := os.WriteFile(f, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Uninstall(f); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(f); !os.IsNotExist(err) {
+		t.Fatal("binary should be gone after Uninstall")
+	}
+}
+
+func TestIsEphemeralBuild(t *testing.T) {
+	if !IsEphemeralBuild("/root/.cache/go-build/ab/cd/exe/main") {
+		t.Error("a go-build path should be ephemeral")
+	}
+	if IsEphemeralBuild("/home/u/go/bin/gospect-mcp") {
+		t.Error("an installed GOBIN path should NOT be ephemeral")
+	}
+}
 
 func TestNewer(t *testing.T) {
 	cases := []struct {

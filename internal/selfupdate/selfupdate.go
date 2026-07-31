@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -107,6 +108,30 @@ func parse(v string) [3]int {
 		out[i], _ = strconv.Atoi(p)
 	}
 	return out
+}
+
+// InstalledPath returns the resolved on-disk path of the running binary.
+func InstalledPath() (string, error) {
+	p, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
+	}
+	return p, nil
+}
+
+// IsEphemeralBuild reports whether path looks like a `go run` temp binary rather than an
+// installed one — so `uninstall` doesn't pointlessly delete a throwaway build.
+func IsEphemeralBuild(path string) bool {
+	p := filepath.ToSlash(path)
+	return strings.Contains(p, "/go-build") || strings.HasPrefix(p, filepath.ToSlash(os.TempDir()))
+}
+
+// Uninstall removes the binary at path.
+func Uninstall(path string) error {
+	return os.Remove(path)
 }
 
 // Install runs `go install module@tag`, streaming output. Requires the Go toolchain on PATH.

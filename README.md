@@ -38,13 +38,18 @@ You'll get a JSON report of findings. That's it — no config, no services, no c
 ### Keeping up to date
 
 ```sh
-gospect-mcp version   # print the installed version
-gospect-mcp update    # check GitHub for a newer release; update if one exists, else "up to date"
+gospect-mcp version         # print the installed version
+gospect-mcp update          # check GitHub for a newer release; update if one exists, else "up to date"
+gospect-mcp uninstall       # remove the installed binary (asks to confirm; add --yes to skip)
 ```
 
 `update` checks the latest GitHub release and, when a newer one exists, reinstalls via
 `go install …@<tag>`. If no release is newer it prints that you're up to date; if none are
 published yet it says so.
+
+`uninstall` deletes the running binary from disk (it resolves its own path, so it also works for
+a downloaded binary). It won't touch a `go run` temp build. After removing, delete the `gospect`
+entry from your MCP client config and any `GOSPECT_GRAPH_*` env vars.
 
 ---
 

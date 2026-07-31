@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
@@ -43,6 +44,9 @@ func main() {
 			return
 		case "propose-fix":
 			runProposeFix()
+			return
+		case "uninstall":
+			runUninstall()
 			return
 		}
 	}
@@ -152,6 +156,48 @@ func envelopeJSON(raw []byte) (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+// runUninstall removes the installed gospect-mcp binary from this machine.
+func runUninstall() {
+	p, err := selfupdate.InstalledPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot locate the binary:", err)
+		os.Exit(1)
+	}
+	if selfupdate.IsEphemeralBuild(p) {
+		fmt.Printf("Nothing to uninstall: this is a temporary build (%s).\n", p)
+		fmt.Println("To remove an installed binary: rm \"$(command -v gospect-mcp)\"")
+		return
+	}
+	fmt.Printf("This will remove the gospect-mcp binary:\n  %s\n", p)
+	if !argHasFlag("--yes") && !argHasFlag("-y") {
+		fmt.Print("Proceed? [y/N]: ")
+		var resp string
+		_, _ = fmt.Scanln(&resp)
+		if resp != "y" && resp != "Y" && resp != "yes" {
+			fmt.Println("Aborted.")
+			return
+		}
+	}
+	if err := selfupdate.Uninstall(p); err != nil {
+		fmt.Fprintf(os.Stderr, "uninstall failed: %v\n", err)
+		if runtime.GOOS == "windows" {
+			fmt.Fprintf(os.Stderr, "On Windows a running .exe can't delete itself — remove it manually: %s\n", p)
+		}
+		os.Exit(1)
+	}
+	fmt.Printf("Removed %s\n", p)
+	fmt.Println("Also remove the \"gospect\" entry from your MCP client config and any GOSPECT_GRAPH_* env vars.")
+}
+
+func argHasFlag(f string) bool {
+	for _, a := range os.Args[1:] {
+		if a == f {
+			return true
+		}
+	}
+	return false
 }
 
 // runProposeFix is the CLI form: it reads a finding as JSON on stdin and prints the envelope.
