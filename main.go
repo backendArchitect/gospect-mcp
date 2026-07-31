@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ import (
 	"github.com/backendArchitect/gospect-mcp/internal/gate"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
+	"github.com/backendArchitect/gospect-mcp/internal/loader"
 	"github.com/backendArchitect/gospect-mcp/internal/mcp"
 	"github.com/backendArchitect/gospect-mcp/internal/scan"
 	"github.com/backendArchitect/gospect-mcp/internal/selfupdate"
@@ -77,9 +79,9 @@ func main() {
 			Patterns: os.Args[3:], Graph: g, GraphScope: scope,
 		})
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "scan error:", err)
-			os.Exit(1)
+			exitScanError(err)
 		}
+		warnSkipped(rep)
 		out, _ := json.MarshalIndent(rep, "", "  ")
 		fmt.Println(string(out))
 		return
@@ -158,6 +160,30 @@ func main() {
 	}
 }
 
+// warnSkipped tells the user (on stderr) which monorepo modules couldn't be loaded, so a partial
+// scan never masquerades as full coverage. Each reason is self-explanatory (e.g. bad vendoring).
+func warnSkipped(rep *scan.Report) {
+	if len(rep.SkippedModules) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "gospect: %d module(s) skipped (could not load):\n", len(rep.SkippedModules))
+	for _, s := range rep.SkippedModules {
+		fmt.Fprintf(os.Stderr, "  - %s\n", s)
+	}
+}
+
+// exitScanError prints a scan failure and exits. A NotGoError (the target has no Go) is a
+// user-facing "wrong tool" message, printed as-is; anything else is an internal scan error.
+func exitScanError(err error) {
+	var notGo *loader.NotGoError
+	if errors.As(err, &notGo) {
+		fmt.Fprintln(os.Stderr, err)
+	} else {
+		fmt.Fprintln(os.Stderr, "scan error:", err)
+	}
+	os.Exit(2)
+}
+
 // envelopeJSON builds a fix envelope from a finding's JSON and returns it pretty-printed.
 func envelopeJSON(raw []byte) (string, error) {
 	var f detect.Finding
@@ -196,9 +222,9 @@ func runCheck() {
 	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{Patterns: args[1:], Graph: g, GraphScope: scope})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "scan error:", err)
-		os.Exit(2)
+		exitScanError(err)
 	}
+	warnSkipped(rep)
 
 	ignoreSet := map[string]bool{}
 	for _, d := range strings.Split(*ignore, ",") {

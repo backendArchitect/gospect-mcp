@@ -38,6 +38,39 @@ You'll get a JSON report of findings. That's it — no config, no services, no c
 > (e.g. ~270 packages in ~5s), but the **first** scan of a big repo may take longer while Go
 > compiles its dependencies once — subsequent scans are fast. Progress is printed to stderr.
 
+### Monorepos (multiple modules)
+
+Point `scan` at the **repo root** and it finds every nested `go.mod` and scans them all in one
+run — no need to loop over services by hand:
+
+```sh
+gospect-mcp scan ./my-monorepo        # scans the root module + every nested service module
+```
+
+(Multi-module discovery kicks in only for the default `./...` pattern; pass an explicit pattern to
+scope to a single module.) If one module can't be loaded — stale vendoring, a private dependency —
+it's **skipped with a reason** printed to stderr and listed in the report's `skipped_modules`, and
+the other modules still scan. A partial scan never masquerades as full coverage.
+
+### Not a Go project?
+
+gospect-mcp is **Go-only**. Point it at a repo with no Go and it says so — and names what it looks
+like instead (`… looks like a JavaScript/TypeScript (Node/React) project. gospect-mcp is Go-only.`)
+rather than failing cryptically.
+
+### Suppressing intentional findings
+
+Mark deliberate code with a `//gospect:ignore` comment on the flagged line (or the line directly
+above it), mirroring the familiar `//nolint` idiom:
+
+```go
+resp.Body.Close() //gospect:ignore                 // suppress any finding on this line
+_ = risky()       //gospect:ignore unchecked-error  // suppress only these detectors (comma/space separated)
+```
+
+Suppressed findings drop from the report; the count is reported as `suppressed`. To silence a whole
+detector across a run instead, use `check -ignore <detector,...>`.
+
 > Prefer building it yourself? See [From source](#from-source).
 
 ### Keeping up to date
@@ -281,17 +314,8 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
   `vX.Y.Z` tag and publish cross-platform binaries + checksums to GitHub Releases. Add
   `[skip release]` to a commit message to skip releasing.
 
-## Roadmap
-
-- [x] Phase 0 — loader, bug/missing/modernize detectors, MCP stdio server, CLI
-- [x] Compose with a code graph — MCP **client** + a codebase-memory adapter; graph detectors:
-  **untested-exports**, **over-engineering**, **missing-handler**, **stale-swagger**
-- [x] `propose_fix` — emits a fix envelope (root cause, verify-first, scope, ponytail
-  constraints); never edits code
-- [x] CI-gate mode — `gospect-mcp check` (severity threshold, exit codes) + a composite GitHub Action
-
 ---
 
 ## License
 
-[GPL-3.0](LICENSE).
+[MIT License](LICENSE).

@@ -32,10 +32,13 @@ type Report struct {
 	Path           string           `json:"path"`
 	Patterns       []string         `json:"patterns"`
 	PackagesLoaded int              `json:"packages_loaded"`
+	ModulesLoaded  int              `json:"modules_loaded"`
 	LoadErrors     int              `json:"load_errors"`
 	LoadMillis     int64            `json:"load_millis"`
 	ScanMillis     int64            `json:"scan_millis"`
 	FindingCount   int              `json:"finding_count"`
+	Suppressed     int              `json:"suppressed"`
+	SkippedModules []string         `json:"skipped_modules,omitempty"`
 	ByCategory     map[string]int   `json:"by_category"`
 	GraphError     string           `json:"graph_error,omitempty"`
 	Findings       []detect.Finding `json:"findings"`
@@ -65,9 +68,21 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	for _, run := range []func() ([]detect.Finding, error){
 		func() ([]detect.Finding, error) { return detect.RunBugDetectors(pkgs) },
 		func() ([]detect.Finding, error) { return detect.RunMissingCode(pkgs) },
-		func() ([]detect.Finding, error) { return detect.RunModernize(dir) },
 	} {
 		fs, err := run()
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, fs...)
+	}
+	// Modernize reads each module's go.mod, so it runs once per loaded module root
+	// (a monorepo has several); fall back to dir when the loader reported none.
+	modRoots := stats.Roots
+	if len(modRoots) == 0 {
+		modRoots = []string{dir}
+	}
+	for _, root := range modRoots {
+		fs, err := detect.RunModernize(root)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +117,9 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		}
 	}
 
+	// Honor //gospect:ignore directives: authors mark intentional code so it drops from the report.
+	findings, suppressed := detect.ApplySuppressions(findings)
+
 	sortFindings(findings)
 	byCat := map[string]int{}
 	for _, f := range findings {
@@ -112,10 +130,13 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		Path:           dir,
 		Patterns:       patterns,
 		PackagesLoaded: stats.Packages,
+		ModulesLoaded:  len(stats.Roots),
 		LoadErrors:     stats.Errors,
 		LoadMillis:     stats.Duration.Milliseconds(),
 		ScanMillis:     time.Since(start).Milliseconds(),
 		FindingCount:   len(findings),
+		Suppressed:     suppressed,
+		SkippedModules: stats.Skipped,
 		ByCategory:     byCat,
 		GraphError:     graphErr,
 		Findings:       findings,
