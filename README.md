@@ -314,6 +314,23 @@ Drop-in GitHub Action:
     # ignore: todo,go-version
 ```
 
+**Post findings as code-scanning annotations (SARIF).** Set `sarif: true` and grant the job
+`security-events: write` — findings then show up inline on the PR and in the Security tab. SARIF is
+generated and uploaded *before* the gate, so annotations appear even when the check fails:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # required for SARIF upload
+steps:
+  - uses: actions/checkout@v4
+  - uses: backendArchitect/gospect-mcp@v1
+    with:
+      path: .
+      sarif: true          # generate + upload SARIF
+      fail-on: high        # still gate the job; set gate: false to annotate only
+```
+
 Or run it directly:
 
 ```yaml

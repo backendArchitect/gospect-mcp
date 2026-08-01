@@ -1,5 +1,5 @@
 name: gospect-mcp
-description: "Report-first Go code scanner — fail CI on findings at or above a severity threshold."
+description: "Report-first Go code scanner — fail CI on findings, and optionally post them as SARIF code-scanning annotations."
 branding:
   icon: search
   color: purple
@@ -21,6 +21,18 @@ inputs:
     description: "Comma-separated detector names to ignore"
     required: false
     default: ""
+  gate:
+    description: "Fail the job on findings at/above fail-on. Set to false to only annotate (see sarif)."
+    required: false
+    default: "true"
+  sarif:
+    description: "Upload findings as SARIF so they appear as code-scanning annotations. Requires the job to have `security-events: write` permission."
+    required: false
+    default: "false"
+  sarif-category:
+    description: "Category for the uploaded SARIF (lets multiple gospect runs coexist in one repo)."
+    required: false
+    default: "gospect"
   version:
     description: "gospect-mcp version to install (latest | vX.Y.Z | main)"
     required: false
@@ -35,7 +47,21 @@ runs:
     - name: Install gospect-mcp
       shell: bash
       run: go install github.com/backendArchitect/gospect-mcp@${{ inputs.version }}
+
+    # SARIF is generated + uploaded BEFORE the gate so annotations post even when the gate fails.
+    - name: gospect scan (SARIF)
+      if: inputs.sarif == 'true'
+      shell: bash
+      run: gospect-mcp scan -format sarif "${{ inputs.path }}" ${{ inputs.patterns }} > gospect.sarif
+    - name: Upload SARIF
+      if: inputs.sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: gospect.sarif
+        category: ${{ inputs.sarif-category }}
+
     - name: gospect check
+      if: inputs.gate == 'true'
       shell: bash
       run: |
         gospect-mcp check \
