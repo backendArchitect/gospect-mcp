@@ -13,6 +13,7 @@ import (
 
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
+	"github.com/backendArchitect/gospect-mcp/internal/graph/local"
 	"github.com/backendArchitect/gospect-mcp/internal/loader"
 	"golang.org/x/tools/go/packages"
 )
@@ -35,6 +36,7 @@ type Options struct {
 
 	IncludeGenerated bool // scan generated files too (default: findings in "DO NOT EDIT" files are dropped)
 	Staticcheck      bool // also run the staticcheck SA analyzers (opt-in: much deeper, but slower)
+	Untested         bool // also report exported functions with no test (opt-in: noisy on large repos)
 
 	// Diff mode: when DiffMode is set, only the packages containing ChangedFiles are loaded and
 	// scanned (fast PR checks). An empty ChangedFiles list yields an empty report.
@@ -148,25 +150,46 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		findings = append(findings, fs...)
 	}
 
-	// Graph-backed detectors are additive: a graph failure is recorded but never fails the
-	// local scan, since the local findings are valuable on their own.
-	// Graph detectors are whole-repo (call graph, routes, coverage), so they're skipped in diff
-	// mode — a PR check should only surface findings in the packages it touched.
+	// Graph-backed detectors are additive: a graph failure is recorded but never fails the local
+	// scan. They're whole-repo, so they're skipped in diff mode (a PR check should only surface
+	// findings in the packages it touched).
+	//
+	// untested-exports and over-engineering run against a built-in graph computed from the loaded
+	// packages — no external server needed. When an external graph IS configured, it's used instead
+	// (richer) and additionally powers the route-based detectors (missing-handler, stale-swagger)
+	// that the built-in graph can't answer yet.
 	var graphErr string
-	if opt.Graph != nil && !opt.DiffMode {
-		progress("running graph-backed detectors…")
+	if !opt.DiffMode {
 		ctx := context.Background()
 		scope := opt.GraphScope
 		if scope == "" {
 			scope = dir
 		}
+		g := opt.Graph
+		if g == nil {
+			g = local.New(pkgs)
+			progress("running built-in graph detectors…")
+		} else {
+			progress("running graph-backed detectors…")
+		}
+		// Over-engineering (complexity hotspots) is bounded and high-signal, so it runs by default.
 		graphRuns := []func() ([]detect.Finding, error){
-			func() ([]detect.Finding, error) { return detect.RunUntestedExports(ctx, opt.Graph, scope) },
 			func() ([]detect.Finding, error) {
-				return detect.RunOverEngineering(ctx, opt.Graph, scope, defaultMinCyclomatic, defaultMinCognitive)
+				return detect.RunOverEngineering(ctx, g, scope, defaultMinCyclomatic, defaultMinCognitive)
 			},
-			func() ([]detect.Finding, error) { return detect.RunMissingHandlers(ctx, opt.Graph) },
-			func() ([]detect.Finding, error) { return detect.RunStaleSwagger(ctx, opt.Graph, dir) },
+		}
+		// Untested-exports is opt-in: the built-in name heuristic is noisy on large repos (misses
+		// cross-package tests). An external graph's TESTS edges are accurate, so run it there too.
+		if opt.Untested || opt.Graph != nil {
+			graphRuns = append(graphRuns,
+				func() ([]detect.Finding, error) { return detect.RunUntestedExports(ctx, g, scope) },
+			)
+		}
+		if opt.Graph != nil { // route detectors need the external graph
+			graphRuns = append(graphRuns,
+				func() ([]detect.Finding, error) { return detect.RunMissingHandlers(ctx, g) },
+				func() ([]detect.Finding, error) { return detect.RunStaleSwagger(ctx, g, dir) },
+			)
 		}
 		for _, run := range graphRuns {
 			if fs, err := run(); err != nil {

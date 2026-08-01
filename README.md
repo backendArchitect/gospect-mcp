@@ -279,25 +279,31 @@ Filter noisy heuristics with `-min-confidence high`.
 | **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
 | **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers, unchecked error returns (errcheck-lite) |
 | **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
+| **over-engineered** | `high-complexity` — functions whose cyclomatic **or** cognitive complexity exceeds conservative thresholds (built-in, no external graph) |
 
 The default set is built entirely on `golang.org/x/tools`. Opt into the deeper
-[staticcheck](https://staticcheck.dev) `SA` analyzers with `-staticcheck` (see below).
-
-**Planned** (see the design notes): over-engineering, stale swagger/OpenAPI vs. routes,
-untested exported code, routes-with-no-handler, deprecated-API detection, and a `propose_fix`
-tool that emits a *fix envelope* (still never applies code) — all via optional composition with
-a code graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp).
+[staticcheck](https://staticcheck.dev) `SA` analyzers with `-staticcheck`, and exported-but-untested
+functions with `-untested` (both below).
 
 ---
 
-## Optional: compose with a code graph
+## Whole-repo detectors (built-in) & the code graph
 
-Some detectors need whole-repo relationships (call graph, routes, test coverage) that
-single-package analysis can't see. `gospect-mcp` gets these by acting as an MCP **client** of a
-code-intelligence graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
-— no graph of its own, no duplicated index.
+Some detectors need whole-repo relationships single-package analysis can't see. gospect builds a
+**built-in graph** from the loaded packages for the two that don't need a full call graph:
 
-Enable it with three env vars (all optional; unset = graph disabled, local detectors still run):
+- **over-engineered / high-complexity** — runs by default; cyclomatic **or** cognitive complexity
+  over conservative thresholds. No configuration.
+- **untested-exports** — opt-in with `-untested` (exported functions with no test in the same
+  package). The built-in check is name-based and noisy on large repos, so it's off by default.
+
+The route-based detectors (**unhandled-route**, **stale-doc / swagger-drift**) need a real call/route
+graph. gospect gets those by acting as an MCP **client** of a code-intelligence graph such as
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) — no graph of its own, no
+duplicated index. It also makes untested-exports more accurate (real TESTS edges instead of names).
+
+Enable it with three env vars (all optional; unset = external graph disabled, built-in detectors
+still run):
 
 ```sh
 export GOSPECT_GRAPH_CMD="codebase-memory-mcp"   # command to launch the graph MCP server
@@ -306,10 +312,7 @@ export GOSPECT_GRAPH_SCOPE="internal/"            # optional file-path substring
 gospect-mcp scan /path/to/module
 ```
 
-When configured, the report gains graph-backed findings:
-- **untested-exports** — exported functions with no incoming test.
-- **over-engineered / high-complexity** — functions/methods whose cyclomatic **or** cognitive
-  complexity exceeds conservative thresholds.
+When configured, the report additionally gains the route-based findings:
 - **unhandled-route** — HTTP routes registered with no handler.
 - **stale-doc / swagger-drift** — endpoints documented in an OpenAPI/Swagger spec (JSON or YAML)
   with no matching registered route (heuristic path matching; report-first).
