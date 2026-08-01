@@ -438,6 +438,44 @@ The calling agent uses the envelope to make a minimal, verified fix. CLI form:
 echo '{"detector":"unchecked-error","file":"x.go","line":14,"message":"..."}' | gospect-mcp propose-fix
 ```
 
+## The `fix` command (verified auto-fix)
+
+`gospect-mcp fix` closes the loop: it drives a **system AI agent** to apply the fix from that
+envelope, then **verifies the result and rolls back on any regression**. gospect stays the sensor
+*and the verifier* — the agent only actuates.
+
+```sh
+gospect-mcp fix -detector nilness .          # auto-detect an installed agent, fix one nilness finding
+gospect-mcp fix -min-severity high -n 5 .    # fix up to 5 findings (each verified fix is committed)
+gospect-mcp fix -safe -staticcheck .         # deterministic analyzer fixes only — no AI agent
+gospect-mcp fix -agent "aider --yes {prompt}" .   # drive a specific agent (or a custom command)
+gospect-mcp fix -dry-run -detector nilness . # just print the prompt gospect would send
+```
+
+It **auto-detects** `claude`, `aider`, `cursor-agent`, `gemini`, `opencode` on your PATH (override
+with `-agent <name>` or a `-agent "<command {prompt}>"` template). Target findings with the usual
+filters (`-detector`, `-min-severity`, `-category`); `-n` fixes several in one run (committing each
+verified fix so the next starts clean — `git reset --soft HEAD~N` to uncommit them).
+
+**`-safe` (no AI).** Some analyzer findings ship a mechanical fix; `-safe` applies those directly —
+no agent involved — still through the full verify harness. It is deliberately conservative: it
+applies a fix only when the analyzer offers **exactly one** (an ambiguous choice, like `!!b` → `!b`
+*or* `b`, is left to you or an agent). Findings without a single clear fix are skipped.
+
+**The safety contract** — a fix is *kept* only if all of these hold; otherwise the working tree is
+restored exactly:
+
+1. Requires a **clean git tree** to start (so any change is cleanly reversible).
+2. After the agent edits, gospect **re-scans**: the target finding must be **gone**, and **no new
+   findings** may appear.
+3. The module must still **build** (`go build ./...`) — add `-test` to also require `go test`.
+4. On success the change is left **uncommitted** for you to review (`git diff`); nothing is committed.
+
+Exit codes: `0` fixed, `1` not applied (rolled back), `2` error (e.g. dirty tree, no agent found).
+
+> `fix` is a CLI-only, explicitly-invoked actuator. The MCP server stays **report-only** — it never
+> edits your code.
+
 ## How it works
 
 ```

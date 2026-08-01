@@ -30,8 +30,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/backendArchitect/gospect-mcp/internal/agent"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/fix"
+	"github.com/backendArchitect/gospect-mcp/internal/fixer"
 	"github.com/backendArchitect/gospect-mcp/internal/gate"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
@@ -63,6 +65,8 @@ func main() {
 		runCheck()
 	case "scan":
 		runScan()
+	case "fix":
+		runFix()
 	default:
 		fmt.Fprintf(os.Stderr, "gospect-mcp: unknown command %q\n\n", os.Args[1])
 		printUsage(os.Stderr)
@@ -78,6 +82,7 @@ Usage:
   gospect-mcp                                    start the MCP server (stdio; default)
   gospect-mcp scan  [flags] <dir> [patterns...]  scan a module or monorepo, print a JSON report
   gospect-mcp check [flags] <dir> [patterns...]  CI gate: exit non-zero on findings at/above a severity
+  gospect-mcp fix   [flags] <dir> [patterns...]  drive a system AI agent to fix ONE finding, then verify it
   gospect-mcp propose-fix                        read a finding (JSON) on stdin, print a fix envelope
   gospect-mcp version                            print the installed version
   gospect-mcp update                             update to the latest release, if any
@@ -105,6 +110,13 @@ Flags (check):
   -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
   -ignore <a,b>       comma-separated detector names to skip
   -format <fmt>       text|json (default text)
+Flags (fix):
+  -agent <name|tmpl>  AI agent to drive: a known name, or a command template with {prompt}
+  -safe               apply only deterministic analyzer fixes (no AI); skips findings without one
+  -n <count>          fix up to N findings; n>1 commits each verified fix (default 1, uncommitted)
+  -dry-run            print the fix prompt(s) only; don't invoke the agent or edit code
+  -test               run "go test ./..." as part of verifying each fix
+  (use -detector/-min-severity/… to target; requires a clean git tree; every fix is verified)
 
 Findings are ordered by importance: bugs (high severity) first, then medium, then low.
 
@@ -180,6 +192,145 @@ func runScan() {
 	if *exitCode && rep.FindingCount > 0 {
 		os.Exit(1)
 	}
+}
+
+// runFix drives a system AI agent to fix findings, verifying each and rolling back on regression.
+// Opt-in and git-checkpointed: requires a clean working tree. A single fix (default) is left
+// uncommitted for review; a batch (-n > 1) commits each verified fix so the next starts clean.
+func runFix() {
+	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
+	agentSpec := fs.String("agent", "", "AI agent: a known name ("+strings.Join(agent.KnownNames(), ", ")+") or a command template with {prompt}")
+	safe := fs.Bool("safe", false, "apply only deterministic analyzer fixes (no AI agent); skips findings without one")
+	n := fs.Int("n", 1, "max findings to fix; n>1 commits each verified fix so the next starts from a clean tree")
+	test := fs.Bool("test", false, "run `go test ./...` as part of verifying each fix")
+	dryRun := fs.Bool("dry-run", false, "print the fix prompt(s) only; don't invoke the agent or edit code")
+	staticcheck := fs.Bool("staticcheck", false, "include staticcheck findings as fix candidates")
+	untested := fs.Bool("untested", false, "include untested-export findings as fix candidates")
+	quiet := fs.Bool("quiet", false, "silence progress on stderr")
+	filter := addFilterFlags(fs)
+	args := parseArgs(fs)
+
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: gospect-mcp fix [flags] <dir> [patterns...]")
+		fmt.Fprintln(os.Stderr, "fixes findings (use -detector/-min-severity/… to target, -n to fix several); requires a clean git tree")
+		os.Exit(2)
+	}
+	dir := args[0]
+	show := !*quiet
+
+	var ag agent.Agent
+	if !*dryRun && !*safe {
+		a, err := resolveAgent(*agentSpec)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fix:", err)
+			os.Exit(2)
+		}
+		ag = a
+		if show {
+			fmt.Fprintf(os.Stderr, "gospect: driving agent %q\n", ag.Name)
+		}
+	} else if *safe && show {
+		fmt.Fprintln(os.Stderr, "gospect: safe mode — applying deterministic analyzer fixes only")
+	}
+
+	if show {
+		fmt.Fprintf(os.Stderr, "gospect: scanning %s for a finding to fix…\n", dir)
+	}
+	rep, err := scan.ScanWithOptions(dir, scan.Options{
+		Patterns: args[1:], Staticcheck: *staticcheck, Untested: *untested, Progress: progressFn(show),
+	})
+	if err != nil {
+		exitScanError(err)
+	}
+	rep.Apply(filter())
+	if rep.FindingCount == 0 {
+		fmt.Fprintln(os.Stderr, "gospect: no matching findings to fix.")
+		return
+	}
+
+	// Candidates in most-actionable order (bugs first), capped at -n.
+	candidates := rep.Findings
+	if len(candidates) > *n {
+		candidates = candidates[:*n]
+	}
+	ctx := context.Background()
+
+	if *dryRun {
+		for _, f := range candidates {
+			r, _ := fixer.Fix(ctx, dir, fixer.Options{Finding: f, DryRun: true})
+			fmt.Println(r.Prompt)
+			fmt.Println(strings.Repeat("—", 60))
+		}
+		return
+	}
+
+	batch := *n > 1
+	var fixed, skipped int
+	for _, f := range candidates {
+		r, err := fixer.Fix(ctx, dir, fixer.Options{Finding: f, Agent: ag, Deterministic: *safe, RunTests: *test, Progress: progressFn(show)})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fix:", err)
+			os.Exit(2)
+		}
+		if r.Applied {
+			fixed++
+			fmt.Fprintf(os.Stderr, "✓ fixed %s (%s)\n", r.Detector, r.Location)
+			if batch { // commit so the next fix starts from a clean tree
+				if err := commitFix(dir, r); err != nil {
+					fmt.Fprintln(os.Stderr, "fix: could not checkpoint-commit:", err)
+					os.Exit(2)
+				}
+			}
+		} else {
+			skipped++
+			fmt.Fprintf(os.Stderr, "✗ %s (%s): %s\n", r.Detector, r.Location, r.Reason)
+		}
+	}
+
+	if batch {
+		fmt.Fprintf(os.Stderr, "\ngospect: %d fixed (each committed), %d skipped, of %d attempted.\n", fixed, skipped, len(candidates))
+		if fixed > 0 {
+			fmt.Fprintf(os.Stderr, "Review with `git log -%d`; undo the commits into the working tree with `git reset --soft HEAD~%d`.\n", fixed, fixed)
+		} else {
+			os.Exit(1)
+		}
+	} else if fixed == 1 {
+		fmt.Fprintln(os.Stderr, "\nNothing was committed — review with `git diff`, then commit.")
+	} else {
+		os.Exit(1)
+	}
+}
+
+// commitFix records a verified fix as its own commit, so a batch fix leaves a clean tree for the
+// next attempt and a reviewable per-fix history.
+func commitFix(dir string, r *fixer.Result) error {
+	if _, err := gitOutput(dir, "add", "-A"); err != nil {
+		return err
+	}
+	_, err := gitOutput(dir, "commit", "-m", fmt.Sprintf("gospect: fix %s (%s)", r.Detector, r.Location))
+	return err
+}
+
+// resolveAgent turns the -agent value (or empty) into a runnable agent: auto-detect when empty, a
+// known installed agent by name, or a custom command template.
+func resolveAgent(spec string) (agent.Agent, error) {
+	if spec == "" {
+		found := agent.Detect()
+		if len(found) == 0 {
+			return agent.Agent{}, fmt.Errorf("no AI agent found on PATH (looked for %s) — install one or pass -agent \"<command {prompt}>\"",
+				strings.Join(agent.KnownNames(), ", "))
+		}
+		return found[0], nil
+	}
+	if a, ok := agent.ByName(spec); ok {
+		return a, nil
+	}
+	for _, n := range agent.KnownNames() {
+		if n == spec {
+			return agent.Agent{}, fmt.Errorf("agent %q is not on your PATH", spec)
+		}
+	}
+	return agent.Parse(spec) // custom template or bare binary name
 }
 
 // applyBaseline hides findings already present in a saved baseline report, so only new ones remain.
