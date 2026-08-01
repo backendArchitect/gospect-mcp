@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,6 +24,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -88,6 +91,7 @@ Flags (scan, check):
   -detector <a,b>     keep only these detectors (e.g. nilness)
   -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
   -baseline <file>    a saved report; show/gate only findings NOT already in it (adopt on noisy repos)
+  -since <git-ref>    diff mode: scan only packages with .go files changed since the ref (fast PR checks)
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
   -include-generated  also report findings in generated ("DO NOT EDIT") files (skipped by default)
 Flags (scan):
@@ -119,6 +123,7 @@ func runScan() {
 	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
+	since := fs.String("since", "", "diff mode: scan only packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
 	mustParse(fs)
 
@@ -135,10 +140,13 @@ func runScan() {
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
 
-	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", args[0])
+	diffMode, changed := diffOptions(args[0], *since)
+	if !diffMode {
+		fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", args[0])
+	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
 		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
-		Vuln: *vuln, IncludeGenerated: *inclGen,
+		Vuln: *vuln, IncludeGenerated: *inclGen, DiffMode: diffMode, ChangedFiles: changed,
 	})
 	if err != nil {
 		exitScanError(err)
@@ -242,6 +250,44 @@ func mustParse(fs *flag.FlagSet) {
 	fmt.Fprintf(os.Stderr, "\nhint: this gospect-mcp is %s — if that flag is newer than your binary, run `gospect-mcp update`.\n",
 		selfupdate.Current())
 	os.Exit(2)
+}
+
+// diffOptions turns a -since git ref into diff-mode scan options: the .go files changed since the
+// ref, as absolute paths. Exits with a clear message if the target isn't a git repo. Pass the ref
+// with `...` (e.g. origin/main...) for merge-base semantics on a PR branch.
+func diffOptions(dir, ref string) (bool, []string) {
+	if ref == "" {
+		return false, nil
+	}
+	top, err := gitOutput(dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gospect: -since needs a git repository (%v)\n", err)
+		os.Exit(2)
+	}
+	top = strings.TrimSpace(top)
+	out, err := gitOutput(dir, "diff", "--name-only", ref, "--", "*.go")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gospect: -since:", err)
+		os.Exit(2)
+	}
+	var files []string
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files = append(files, filepath.Join(top, line))
+		}
+	}
+	fmt.Fprintf(os.Stderr, "gospect: diff mode — %d changed Go file(s) since %s\n", len(files), ref)
+	return true, files
+}
+
+func gitOutput(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
+	}
+	return out.String(), nil
 }
 
 // progressFn returns a stderr progress printer when verbose, else nil (progress suppressed).
@@ -400,6 +446,7 @@ func runCheck() {
 	baseline := fs.String("baseline", "", "path to a saved report; gate only on findings NOT already in it")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
+	since := fs.String("since", "", "diff mode: gate only on packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
 	mustParse(fs)
 
@@ -413,10 +460,13 @@ func runCheck() {
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
 
-	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
+	diffMode, changed := diffOptions(args[0], *since)
+	if !diffMode {
+		fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
+	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
 		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
-		Vuln: *vuln, IncludeGenerated: *inclGen,
+		Vuln: *vuln, IncludeGenerated: *inclGen, DiffMode: diffMode, ChangedFiles: changed,
 	})
 	if err != nil {
 		exitScanError(err)

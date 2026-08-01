@@ -132,6 +132,21 @@ gospect-mcp check -baseline gospect-baseline.json -fail-on medium .   # CI fails
 Matching is by a line-independent fingerprint (detector + path + message), so a pre-existing finding
 that merely shifts lines stays baselined.
 
+### Fast PR checks: diff mode
+
+On a pull request you don't need to rescan the whole repo — only what changed. `-since <git-ref>`
+loads and scans just the packages containing `.go` files changed since that ref:
+
+```sh
+gospect-mcp scan  -since origin/main .              # scan only changed packages
+gospect-mcp check -since origin/main -fail-on high . # gate a PR on its own changes
+```
+
+On a large monorepo this turns a ~30s full scan into a **~1–2s** PR check (it loads only the
+touched module, not every service). Use `origin/main...` (three dots) for merge-base semantics on a
+branch. Outside a git repo, or without `-since`, it does a normal full scan. Diff mode skips the
+whole-repo graph detectors, since a PR check should only surface findings in the code it touched.
+
 ### GitHub code scanning (SARIF) & vulnerabilities
 
 ```sh

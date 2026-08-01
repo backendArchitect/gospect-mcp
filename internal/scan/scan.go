@@ -14,6 +14,7 @@ import (
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/loader"
+	"golang.org/x/tools/go/packages"
 )
 
 // Complexity thresholds for the graph-backed over-engineering detector. Conservative so it flags
@@ -33,6 +34,11 @@ type Options struct {
 	Vuln       bool         // run govulncheck (opt-in: slow, needs the vuln DB)
 
 	IncludeGenerated bool // scan generated files too (default: findings in "DO NOT EDIT" files are dropped)
+
+	// Diff mode: when DiffMode is set, only the packages containing ChangedFiles are loaded and
+	// scanned (fast PR checks). An empty ChangedFiles list yields an empty report.
+	DiffMode     bool
+	ChangedFiles []string
 }
 
 // Report is the report-only output of a scan.
@@ -83,7 +89,14 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	if progress == nil {
 		progress = func(string) {} // no-op keeps the call sites clean
 	}
-	pkgs, stats, err := loader.LoadWithProgress(dir, opt.Progress, patterns...)
+	var pkgs []*packages.Package
+	var stats loader.Stats
+	var err error
+	if opt.DiffMode {
+		pkgs, stats, err = loader.LoadChanged(dir, opt.ChangedFiles, opt.Progress)
+	} else {
+		pkgs, stats, err = loader.LoadWithProgress(dir, opt.Progress, patterns...)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +142,10 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 
 	// Graph-backed detectors are additive: a graph failure is recorded but never fails the
 	// local scan, since the local findings are valuable on their own.
+	// Graph detectors are whole-repo (call graph, routes, coverage), so they're skipped in diff
+	// mode — a PR check should only surface findings in the packages it touched.
 	var graphErr string
-	if opt.Graph != nil {
+	if opt.Graph != nil && !opt.DiffMode {
 		progress("running graph-backed detectors…")
 		ctx := context.Background()
 		scope := opt.GraphScope

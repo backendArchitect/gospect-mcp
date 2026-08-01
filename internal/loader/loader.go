@@ -80,39 +80,143 @@ func LoadWithProgress(dir string, progress func(string), patterns ...string) ([]
 		if err != nil {
 			return nil, Stats{}, err
 		}
-		return finalize(pkgs, roots, start)
+		return finalize(pkgs, roots, nil, start)
 	}
 
-	// Multi-module (monorepo): load modules concurrently — they're independent, and the load is the
-	// slow half of a big scan. One broken module (bad vendoring, private dep) must not abort the
-	// rest, so a per-module error is recorded and skipped, never fatal.
+	// Multi-module (monorepo): each nested module is a separate job loaded concurrently.
+	jobs := make([]loadJob, len(roots))
+	for i, root := range roots {
+		jobs[i] = loadJob{root: root, patterns: patterns}
+	}
+	all, loaded, skipped := runLoads(jobs, dir, progress)
+	if len(all) == 0 {
+		return nil, Stats{}, fmt.Errorf("all %d module(s) failed to load:\n  %s", len(roots), strings.Join(skipped, "\n  "))
+	}
+	return finalize(all, loaded, skipped, start)
+}
+
+// loadJob is one packages.Load invocation: a module root and the patterns to load within it.
+type loadJob struct {
+	root     string
+	patterns []string
+}
+
+// LoadChanged loads only the packages that contain the given changed files (diff mode) — far
+// faster than a whole-repo scan on a PR. Each file is attributed to its module (nested go.mod
+// aware), and one packages.Load per module loads just the affected package directories. Non-Go or
+// non-existent paths are ignored; an empty result (nothing relevant changed) yields zero packages.
+func LoadChanged(dir string, changed []string, progress func(string)) ([]*packages.Package, Stats, error) {
+	roots, hasGo, hint := survey(dir)
+	if !hasGo && len(roots) == 0 {
+		return nil, Stats{}, &NotGoError{Dir: dir, Hint: hint}
+	}
+	if len(roots) == 0 {
+		roots = []string{dir} // loose .go files with no go.mod
+	}
+	// survey() returns roots relative to dir; the changed files are absolute, so compare on
+	// absolute paths.
+	for i, r := range roots {
+		if abs, err := filepath.Abs(r); err == nil {
+			roots[i] = abs
+		}
+	}
+
+	// Group each changed .go file's package directory under the module root that owns it.
+	byRoot := map[string]map[string]bool{} // root -> set of "./pkg" patterns
+	for _, f := range changed {
+		if !strings.HasSuffix(f, ".go") {
+			continue
+		}
+		abs, err := filepath.Abs(f)
+		if err != nil {
+			continue
+		}
+		root := owningRoot(abs, roots)
+		if root == "" {
+			continue // outside the scanned tree
+		}
+		rel, err := filepath.Rel(root, filepath.Dir(abs))
+		if err != nil {
+			continue
+		}
+		pat := "./" + filepath.ToSlash(rel)
+		if rel == "." {
+			pat = "."
+		}
+		if byRoot[root] == nil {
+			byRoot[root] = map[string]bool{}
+		}
+		byRoot[root][pat] = true
+	}
+
+	start := time.Now()
+	if len(byRoot) == 0 {
+		return nil, Stats{Duration: time.Since(start)}, nil // nothing relevant changed
+	}
+
+	var jobs []loadJob
+	for root, pats := range byRoot {
+		patterns := make([]string, 0, len(pats))
+		for p := range pats {
+			patterns = append(patterns, p)
+		}
+		jobs = append(jobs, loadJob{root: root, patterns: patterns})
+	}
+	all, loaded, skipped := runLoads(jobs, dir, progress)
+	if len(all) == 0 && len(skipped) > 0 {
+		return nil, Stats{}, fmt.Errorf("all changed package(s) failed to load:\n  %s", strings.Join(skipped, "\n  "))
+	}
+	return finalize(all, loaded, skipped, start)
+}
+
+// owningRoot returns the deepest module root that is a directory prefix of file, or "" if none.
+func owningRoot(file string, roots []string) string {
+	best := ""
+	for _, r := range roots {
+		if underDir(file, r) && len(r) > len(best) {
+			best = r
+		}
+	}
+	return best
+}
+
+// underDir reports whether file is inside dir (path-prefix aware, not a mere string prefix).
+func underDir(file, dir string) bool {
+	rel, err := filepath.Rel(dir, file)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// runLoads executes load jobs concurrently (the load is the slow half of a big scan, and the jobs
+// are independent). A job that fails is recorded in skipped and dropped, never fatal — one broken
+// module must not abort the rest. dir is only used to render compact progress labels.
+func runLoads(jobs []loadJob, dir string, progress func(string)) (all []*packages.Package, loaded, skipped []string) {
 	type result struct {
 		root string
 		pkgs []*packages.Package
 		err  error
 	}
-	results := make([]result, len(roots))
-	sem := make(chan struct{}, loadConcurrency(len(roots)))
+	results := make([]result, len(jobs))
+	sem := make(chan struct{}, loadConcurrency(len(jobs)))
 	var wg sync.WaitGroup
 	var done int32
-	for i, root := range roots {
+	for i, j := range jobs {
 		wg.Add(1)
-		go func(i int, root string) {
+		go func(i int, j loadJob) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: root}, patterns...)
-			results[i] = result{root, pkgs, err}
+			pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: j.root}, j.patterns...)
+			results[i] = result{j.root, pkgs, err}
 			if progress != nil {
-				progress(fmt.Sprintf("loaded module %d/%d: %s", atomic.AddInt32(&done, 1), len(roots), relDir(dir, root)))
+				progress(fmt.Sprintf("loaded %d/%d: %s", atomic.AddInt32(&done, 1), len(jobs), relDir(dir, j.root)))
 			}
-		}(i, root)
+		}(i, j)
 	}
 	wg.Wait()
 
-	var all []*packages.Package
-	var skipped []string
-	loaded := roots[:0:0]
 	for _, r := range results {
 		if r.err != nil {
 			skipped = append(skipped, fmt.Sprintf("%s: %s", r.root, firstLine(r.err)))
@@ -121,20 +225,12 @@ func LoadWithProgress(dir string, progress func(string), patterns ...string) ([]
 		all = append(all, r.pkgs...)
 		loaded = append(loaded, r.root)
 	}
-	if len(all) == 0 {
-		return nil, Stats{}, fmt.Errorf("all %d module(s) failed to load:\n  %s", len(roots), strings.Join(skipped, "\n  "))
-	}
-
-	stats := Stats{Duration: time.Since(start), Packages: len(all), Roots: loaded, Skipped: skipped}
-	packages.Visit(all, nil, func(p *packages.Package) {
-		stats.Errors += len(p.Errors)
-	})
-	return all, stats, nil
+	return all, loaded, skipped
 }
 
-// finalize builds Stats for a fully-loaded single-module result.
-func finalize(pkgs []*packages.Package, roots []string, start time.Time) ([]*packages.Package, Stats, error) {
-	stats := Stats{Duration: time.Since(start), Packages: len(pkgs), Roots: roots}
+// finalize builds Stats for a completed load.
+func finalize(pkgs []*packages.Package, roots, skipped []string, start time.Time) ([]*packages.Package, Stats, error) {
+	stats := Stats{Duration: time.Since(start), Packages: len(pkgs), Roots: roots, Skipped: skipped}
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
 		stats.Errors += len(p.Errors)
 	})
