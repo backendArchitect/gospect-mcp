@@ -11,22 +11,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/backendArchitect/gospect-mcp/internal/agent"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/fix"
+	"github.com/backendArchitect/gospect-mcp/internal/loader"
 	"github.com/backendArchitect/gospect-mcp/internal/scan"
 )
 
 // Options configures a single fix attempt.
 type Options struct {
-	Finding  detect.Finding
-	Agent    agent.Agent
-	RunTests bool         // also run `go test ./...` as part of verification
-	DryRun   bool         // build the prompt and stop (don't invoke the agent)
-	Progress func(string) // human-readable progress (stderr)
-	Output   *bytes.Buffer
+	Finding       detect.Finding
+	Agent         agent.Agent
+	Deterministic bool         // apply the analyzer's SuggestedFix instead of driving an agent
+	RunTests      bool         // also run `go test ./...` as part of verification
+	DryRun        bool         // build the prompt and stop (don't invoke the agent)
+	Progress      func(string) // human-readable progress (stderr)
+	Output        *bytes.Buffer
 }
 
 // Result is the outcome of one fix attempt.
@@ -89,13 +92,29 @@ func Fix(ctx context.Context, dir string, o Options) (*Result, error) {
 	}
 	beforeFPs := fingerprintSet(before.Findings)
 
-	progress(fmt.Sprintf("invoking %s to fix %s at %s …", o.Agent.Name, f.Detector, loc(f)))
-	if err := o.Agent.Run(ctx, top, prompt, agentOut(o)); err != nil {
-		// Agent crashed — revert anything it half-wrote.
-		rollback(top)
-		res.Reason = "agent failed: " + err.Error()
-		res.RolledBack = true
-		return res, nil
+	// Actuate: apply a deterministic analyzer fix, or drive the AI agent.
+	if o.Deterministic {
+		progress(fmt.Sprintf("applying a deterministic fix for %s at %s …", f.Detector, loc(f)))
+		pkgs, _, lerr := loader.LoadChanged(root, []string{file}, nil)
+		if lerr != nil {
+			return nil, fmt.Errorf("load for deterministic fix: %w", lerr)
+		}
+		edits, ok := detect.SuggestedEdits(pkgs, f)
+		if !ok {
+			res.Reason = "no deterministic fix is available for this finding — use an agent"
+			return res, nil
+		}
+		if err := applyEdits(edits); err != nil {
+			return finishRollback(top, res, "applying the suggested edit failed: "+err.Error(), nil), nil
+		}
+	} else {
+		progress(fmt.Sprintf("invoking %s to fix %s at %s …", o.Agent.Name, f.Detector, loc(f)))
+		if err := o.Agent.Run(ctx, top, prompt, agentOut(o)); err != nil {
+			rollback(top) // agent crashed — revert anything it half-wrote
+			res.Reason = "agent failed: " + err.Error()
+			res.RolledBack = true
+			return res, nil
+		}
 	}
 
 	if changed, _ := git(top, "status", "--porcelain"); changed == "" {
@@ -233,6 +252,32 @@ func moduleRoot(file string) string {
 func rollback(top string) {
 	_, _ = git(top, "checkout", "--", ".") // restore modified tracked files
 	_, _ = git(top, "clean", "-fd")        // remove new (untracked) files the agent created
+}
+
+// applyEdits writes a set of resolved text edits to disk. Edits within a file are applied
+// back-to-front so earlier offsets stay valid.
+func applyEdits(edits []detect.TextEdit) error {
+	byFile := map[string][]detect.TextEdit{}
+	for _, e := range edits {
+		byFile[e.File] = append(byFile[e.File], e)
+	}
+	for file, es := range byFile {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		sort.Slice(es, func(i, j int) bool { return es[i].Start > es[j].Start })
+		for _, e := range es {
+			if e.Start < 0 || e.End > len(data) || e.Start > e.End {
+				return fmt.Errorf("edit range [%d:%d] out of bounds for %s", e.Start, e.End, file)
+			}
+			data = append(data[:e.Start], append([]byte(e.NewText), data[e.End:]...)...)
+		}
+		if err := os.WriteFile(file, data, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func git(dir string, args ...string) (string, error) {

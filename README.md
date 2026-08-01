@@ -446,14 +446,21 @@ envelope, then **verifies the result and rolls back on any regression**. gospect
 
 ```sh
 gospect-mcp fix -detector nilness .          # auto-detect an installed agent, fix one nilness finding
-gospect-mcp fix -min-severity high .         # fix the top high-severity finding
+gospect-mcp fix -min-severity high -n 5 .    # fix up to 5 findings (each verified fix is committed)
+gospect-mcp fix -safe -staticcheck .         # deterministic analyzer fixes only — no AI agent
 gospect-mcp fix -agent "aider --yes {prompt}" .   # drive a specific agent (or a custom command)
 gospect-mcp fix -dry-run -detector nilness . # just print the prompt gospect would send
 ```
 
 It **auto-detects** `claude`, `aider`, `cursor-agent`, `gemini`, `opencode` on your PATH (override
-with `-agent <name>` or a `-agent "<command {prompt}>"` template). It targets **one** finding —
-pick it with the usual filters (`-detector`, `-min-severity`, `-category`).
+with `-agent <name>` or a `-agent "<command {prompt}>"` template). Target findings with the usual
+filters (`-detector`, `-min-severity`, `-category`); `-n` fixes several in one run (committing each
+verified fix so the next starts clean — `git reset --soft HEAD~N` to uncommit them).
+
+**`-safe` (no AI).** Some analyzer findings ship a mechanical fix; `-safe` applies those directly —
+no agent involved — still through the full verify harness. It is deliberately conservative: it
+applies a fix only when the analyzer offers **exactly one** (an ambiguous choice, like `!!b` → `!b`
+*or* `b`, is left to you or an agent). Findings without a single clear fix are skipped.
 
 **The safety contract** — a fix is *kept* only if all of these hold; otherwise the working tree is
 restored exactly:

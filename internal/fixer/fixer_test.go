@@ -38,6 +38,33 @@ func TestModuleRoot(t *testing.T) {
 	}
 }
 
+func TestApplyEdits(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "x.txt")
+	writeFile(t, f, "hello world")
+	// Two edits given out of order; applyEdits must apply them back-to-front so offsets stay valid.
+	err := applyEdits([]detect.TextEdit{
+		{File: f, Start: 6, End: 11, NewText: "gophers"},
+		{File: f, Start: 0, End: 5, NewText: "hi"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(f)
+	if string(got) != "hi gophers" {
+		t.Fatalf("applyEdits = %q, want %q", got, "hi gophers")
+	}
+}
+
+func TestApplyEdits_OutOfBounds(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "x.txt")
+	writeFile(t, f, "abc")
+	if err := applyEdits([]detect.TextEdit{{File: f, Start: 0, End: 99, NewText: "x"}}); err == nil {
+		t.Fatal("expected an out-of-bounds error")
+	}
+}
+
 func TestNewFindings(t *testing.T) {
 	before := []detect.Finding{{Fingerprint: "a"}, {Fingerprint: "b"}}
 	after := []detect.Finding{{Fingerprint: "a"}, {Fingerprint: "c"}} // b fixed, c is new
@@ -83,6 +110,27 @@ func TestFix_Integration(t *testing.T) {
 		}
 		if st := status(t, dir); st == "" {
 			t.Fatal("expected the fix to remain in the working tree")
+		}
+	})
+
+	t.Run("deterministic safe fix", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/app\n\ngo 1.21\n")
+		writeFile(t, filepath.Join(dir, "app.go"), "package app\n\nimport \"fmt\"\n\nfunc F(s string) { fmt.Printf(s) }\n")
+		run(t, dir, "git", "init", "-q")
+		run(t, dir, "git", "config", "user.email", "t@t")
+		run(t, dir, "git", "config", "user.name", "t")
+		run(t, dir, "git", "add", "-A")
+		run(t, dir, "git", "commit", "-qm", "init")
+
+		// SA1006 (Printf with a dynamic format) has exactly one suggested fix -> deterministically applied.
+		f := detect.Finding{Detector: "SA1006", File: filepath.Join(dir, "app.go"), Line: 5}
+		res, err := Fix(context.Background(), dir, Options{Finding: f, Deterministic: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Applied {
+			t.Fatalf("expected the deterministic fix to apply, got %+v", res)
 		}
 	})
 
