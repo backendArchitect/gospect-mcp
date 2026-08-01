@@ -30,8 +30,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/backendArchitect/gospect-mcp/internal/agent"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/fix"
+	"github.com/backendArchitect/gospect-mcp/internal/fixer"
 	"github.com/backendArchitect/gospect-mcp/internal/gate"
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
 	"github.com/backendArchitect/gospect-mcp/internal/graph/cbm"
@@ -63,6 +65,8 @@ func main() {
 		runCheck()
 	case "scan":
 		runScan()
+	case "fix":
+		runFix()
 	default:
 		fmt.Fprintf(os.Stderr, "gospect-mcp: unknown command %q\n\n", os.Args[1])
 		printUsage(os.Stderr)
@@ -78,6 +82,7 @@ Usage:
   gospect-mcp                                    start the MCP server (stdio; default)
   gospect-mcp scan  [flags] <dir> [patterns...]  scan a module or monorepo, print a JSON report
   gospect-mcp check [flags] <dir> [patterns...]  CI gate: exit non-zero on findings at/above a severity
+  gospect-mcp fix   [flags] <dir> [patterns...]  drive a system AI agent to fix ONE finding, then verify it
   gospect-mcp propose-fix                        read a finding (JSON) on stdin, print a fix envelope
   gospect-mcp version                            print the installed version
   gospect-mcp update                             update to the latest release, if any
@@ -105,6 +110,11 @@ Flags (check):
   -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
   -ignore <a,b>       comma-separated detector names to skip
   -format <fmt>       text|json (default text)
+Flags (fix):
+  -agent <name|tmpl>  AI agent to drive: a known name, or a command template with {prompt}
+  -dry-run            print the fix prompt only; don't invoke the agent or edit code
+  -test               run "go test ./..." as part of verifying the fix
+  (targets ONE finding — use -detector/-min-severity/… to pick it; requires a clean git tree)
 
 Findings are ordered by importance: bugs (high severity) first, then medium, then low.
 
@@ -180,6 +190,103 @@ func runScan() {
 	if *exitCode && rep.FindingCount > 0 {
 		os.Exit(1)
 	}
+}
+
+// runFix drives a system AI agent to fix ONE finding, then verifies and rolls back on regression.
+// Opt-in and git-checkpointed: it requires a clean working tree and leaves the verified change
+// uncommitted for review. Use filters (-detector/-min-severity/…) to target which finding.
+func runFix() {
+	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
+	agentSpec := fs.String("agent", "", "AI agent: a known name ("+strings.Join(agent.KnownNames(), ", ")+") or a command template with {prompt}")
+	test := fs.Bool("test", false, "run `go test ./...` as part of verifying the fix")
+	dryRun := fs.Bool("dry-run", false, "print the fix prompt only; don't invoke the agent or edit code")
+	staticcheck := fs.Bool("staticcheck", false, "include staticcheck findings as fix candidates")
+	untested := fs.Bool("untested", false, "include untested-export findings as fix candidates")
+	quiet := fs.Bool("quiet", false, "silence progress on stderr")
+	filter := addFilterFlags(fs)
+	args := parseArgs(fs)
+
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: gospect-mcp fix [flags] <dir> [patterns...]")
+		fmt.Fprintln(os.Stderr, "fixes ONE finding (use -detector/-min-severity/… to target it); requires a clean git tree")
+		os.Exit(2)
+	}
+	dir := args[0]
+	show := !*quiet
+
+	var ag agent.Agent
+	if !*dryRun {
+		a, err := resolveAgent(*agentSpec)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fix:", err)
+			os.Exit(2)
+		}
+		ag = a
+		if show {
+			fmt.Fprintf(os.Stderr, "gospect: driving agent %q\n", ag.Name)
+		}
+	}
+
+	if show {
+		fmt.Fprintf(os.Stderr, "gospect: scanning %s for a finding to fix…\n", dir)
+	}
+	rep, err := scan.ScanWithOptions(dir, scan.Options{
+		Patterns: args[1:], Staticcheck: *staticcheck, Untested: *untested, Progress: progressFn(show),
+	})
+	if err != nil {
+		exitScanError(err)
+	}
+	rep.Apply(filter())
+	if rep.FindingCount == 0 {
+		fmt.Fprintln(os.Stderr, "gospect: no matching findings to fix.")
+		return
+	}
+
+	// Fix the top candidate (findings are sorted most-actionable first).
+	r, err := fixer.Fix(context.Background(), dir, fixer.Options{
+		Finding: rep.Findings[0], Agent: ag, RunTests: *test, DryRun: *dryRun, Progress: progressFn(show),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fix:", err)
+		os.Exit(2)
+	}
+
+	if *dryRun {
+		fmt.Println(r.Prompt)
+		return
+	}
+	if r.Applied {
+		fmt.Fprintf(os.Stderr, "\n✓ fixed %s (%s) — verified: finding gone, no new findings, still builds.\n", r.Detector, r.Location)
+		fmt.Fprintln(os.Stderr, "Nothing was committed — review with `git diff`, then commit.")
+	} else {
+		fmt.Fprintf(os.Stderr, "\n✗ not applied for %s (%s): %s\n", r.Detector, r.Location, r.Reason)
+		if r.RolledBack {
+			fmt.Fprintln(os.Stderr, "The working tree was restored — no changes remain.")
+		}
+		os.Exit(1)
+	}
+}
+
+// resolveAgent turns the -agent value (or empty) into a runnable agent: auto-detect when empty, a
+// known installed agent by name, or a custom command template.
+func resolveAgent(spec string) (agent.Agent, error) {
+	if spec == "" {
+		found := agent.Detect()
+		if len(found) == 0 {
+			return agent.Agent{}, fmt.Errorf("no AI agent found on PATH (looked for %s) — install one or pass -agent \"<command {prompt}>\"",
+				strings.Join(agent.KnownNames(), ", "))
+		}
+		return found[0], nil
+	}
+	if a, ok := agent.ByName(spec); ok {
+		return a, nil
+	}
+	for _, n := range agent.KnownNames() {
+		if n == spec {
+			return agent.Agent{}, fmt.Errorf("agent %q is not on your PATH", spec)
+		}
+	}
+	return agent.Parse(spec) // custom template or bare binary name
 }
 
 // applyBaseline hides findings already present in a saved baseline report, so only new ones remain.
