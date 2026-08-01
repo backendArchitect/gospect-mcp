@@ -34,6 +34,7 @@ type Options struct {
 	Vuln       bool         // run govulncheck (opt-in: slow, needs the vuln DB)
 
 	IncludeGenerated bool // scan generated files too (default: findings in "DO NOT EDIT" files are dropped)
+	Staticcheck      bool // also run the staticcheck SA analyzers (opt-in: much deeper, but slower)
 
 	// Diff mode: when DiffMode is set, only the packages containing ChangedFiles are loaded and
 	// scanned (fast PR checks). An empty ChangedFiles list yields an empty report.
@@ -107,10 +108,17 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	var findings []detect.Finding
 	// Local detectors are independent and report-only. A local detector erroring aborts the scan
 	// rather than returning a partial, misleading "all clear".
-	for _, run := range []func() ([]detect.Finding, error){
+	localRuns := []func() ([]detect.Finding, error){
 		func() ([]detect.Finding, error) { return detect.RunBugDetectors(pkgs) },
 		func() ([]detect.Finding, error) { return detect.RunMissingCode(pkgs) },
-	} {
+	}
+	if opt.Staticcheck {
+		localRuns = append(localRuns, func() ([]detect.Finding, error) {
+			progress("running staticcheck analyzers… (deeper, but slower)")
+			return detect.RunStaticcheck(pkgs)
+		})
+	}
+	for _, run := range localRuns {
 		fs, err := run()
 		if err != nil {
 			return nil, err

@@ -92,6 +92,7 @@ Flags (scan, check):
   -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
   -baseline <file>    a saved report; show/gate only findings NOT already in it (adopt on noisy repos)
   -since <git-ref>    diff mode: scan only packages with .go files changed since the ref (fast PR checks)
+  -staticcheck        also run the staticcheck SA analyzers — much deeper bug detection, but slower
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
   -include-generated  also report findings in generated ("DO NOT EDIT") files (skipped by default)
 Flags (scan):
@@ -123,6 +124,7 @@ func runScan() {
 	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
+	staticcheck := fs.Bool("staticcheck", false, "also run staticcheck SA analyzers (much deeper, but slower)")
 	since := fs.String("since", "", "diff mode: scan only packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
 	mustParse(fs)
@@ -146,7 +148,7 @@ func runScan() {
 	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
 		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
-		Vuln: *vuln, IncludeGenerated: *inclGen, DiffMode: diffMode, ChangedFiles: changed,
+		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, DiffMode: diffMode, ChangedFiles: changed,
 	})
 	if err != nil {
 		exitScanError(err)
@@ -446,6 +448,7 @@ func runCheck() {
 	baseline := fs.String("baseline", "", "path to a saved report; gate only on findings NOT already in it")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
+	staticcheck := fs.Bool("staticcheck", false, "also run staticcheck SA analyzers (much deeper, but slower)")
 	since := fs.String("since", "", "diff mode: gate only on packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
 	mustParse(fs)
@@ -466,7 +469,7 @@ func runCheck() {
 	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
 		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
-		Vuln: *vuln, IncludeGenerated: *inclGen, DiffMode: diffMode, ChangedFiles: changed,
+		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, DiffMode: diffMode, ChangedFiles: changed,
 	})
 	if err != nil {
 		exitScanError(err)

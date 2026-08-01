@@ -1,7 +1,7 @@
 # gospect-mcp
 
 ![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8?logo=go&logoColor=white)
-![License](https://img.shields.io/badge/License-GPL--3.0-green)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 ![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)
 [![CI](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml)
 [![Release](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml)
@@ -131,6 +131,22 @@ gospect-mcp check -baseline gospect-baseline.json -fail-on medium .   # CI fails
 
 Matching is by a line-independent fingerprint (detector + path + message), so a pre-existing finding
 that merely shifts lines stays baselined.
+
+### Deeper analysis: staticcheck
+
+By default gospect runs a fast, high-precision analyzer set. Add `-staticcheck` to also run the
+[staticcheck](https://staticcheck.dev) `SA` analyzers — the canonical Go bug checks (`SA1019`
+deprecated-API usage, dead assignments, impossible conditions, and ~100 more):
+
+```sh
+gospect-mcp scan -staticcheck .                       # much deeper bug detection
+gospect-mcp check -staticcheck -since origin/main .   # deep, but only on the PR's changes (fast)
+```
+
+It's opt-in because it's **thorough but slow** — roughly an order of magnitude slower than the
+default set on a large module. Pairing it with `-since` (diff mode) keeps PR checks fast while still
+getting staticcheck depth on the changed code. Findings land under the `bug` category (and
+`modernize` for deprecated-API `SA1019`), so existing severity gates and filters apply.
 
 ### Fast PR checks: diff mode
 
@@ -262,7 +278,8 @@ All detectors are deterministic and report-only. Findings carry `category`, `det
 | **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers, unchecked error returns (errcheck-lite) |
 | **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
 
-Built entirely on `golang.org/x/tools` — no heavyweight dependencies.
+The default set is built entirely on `golang.org/x/tools`. Opt into the deeper
+[staticcheck](https://staticcheck.dev) `SA` analyzers with `-staticcheck` (see below).
 
 **Planned** (see the design notes): over-engineering, stale swagger/OpenAPI vs. routes,
 untested exported code, routes-with-no-handler, deprecated-API detection, and a `propose_fix`
