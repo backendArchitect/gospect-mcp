@@ -89,6 +89,7 @@ Flags (scan, check):
   -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
   -baseline <file>    a saved report; show/gate only findings NOT already in it (adopt on noisy repos)
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
+  -include-generated  also report findings in generated ("DO NOT EDIT") files (skipped by default)
 Flags (scan):
   -format <fmt>       json|text|sarif (default json; sarif = GitHub code-scanning)
   -exit-code          exit 1 if any findings remain (after filters/baseline)
@@ -111,14 +112,15 @@ Docs: https://github.com/backendArchitect/gospect-mcp
 // runScan is the standalone CLI: scan a module/monorepo and print the JSON report. Flags precede
 // the positional args: `scan [flags] <dir> [patterns...]`.
 func runScan() {
-	fs := flag.NewFlagSet("scan", flag.ExitOnError)
+	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	verbose := fs.Bool("verbose", false, "stream load/detector progress and a summary to stderr")
 	format := fs.String("format", "json", "output format: json|text|sarif")
 	baseline := fs.String("baseline", "", "path to a saved report; show only findings NOT already in it")
 	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
+	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
 	filter := addFilterFlags(fs)
-	_ = fs.Parse(os.Args[2:])
+	mustParse(fs)
 
 	args := fs.Args()
 	if len(args) == 0 {
@@ -135,7 +137,8 @@ func runScan() {
 
 	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", args[0])
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
-		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose), Vuln: *vuln,
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+		Vuln: *vuln, IncludeGenerated: *inclGen,
 	})
 	if err != nil {
 		exitScanError(err)
@@ -223,6 +226,22 @@ func printFindingsText(rep *scan.Report) {
 		}
 		fmt.Printf("  [%-6s] %-16s %s\n           %s\n", f.Severity, f.Detector, loc, f.Message)
 	}
+}
+
+// mustParse parses a subcommand's flags (os.Args[2:]) with a friendlier failure than the flag
+// package's default. On an unknown flag it appends a version + "run update" hint — the common cause
+// is an out-of-date binary that predates the flag (flag already printed the specific error/usage).
+func mustParse(fs *flag.FlagSet) {
+	err := fs.Parse(os.Args[2:])
+	if err == nil {
+		return
+	}
+	if errors.Is(err, flag.ErrHelp) {
+		os.Exit(0) // -h/--help: flag printed usage already
+	}
+	fmt.Fprintf(os.Stderr, "\nhint: this gospect-mcp is %s — if that flag is newer than your binary, run `gospect-mcp update`.\n",
+		selfupdate.Current())
+	os.Exit(2)
 }
 
 // progressFn returns a stderr progress printer when verbose, else nil (progress suppressed).
@@ -373,15 +392,16 @@ func envelopeJSON(raw []byte) (string, error) {
 // runCheck is the CI-gate mode: scan, then exit non-zero if any finding is at/above the
 // configured severity. Flags must precede the positional args: `check [flags] <dir> [patterns...]`.
 func runCheck() {
-	fs := flag.NewFlagSet("check", flag.ExitOnError)
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	failOn := fs.String("fail-on", "high", "minimum severity that fails the check: high|medium|low")
 	format := fs.String("format", "text", "output format: text|json")
 	ignore := fs.String("ignore", "", "comma-separated detector names to ignore")
 	verbose := fs.Bool("verbose", false, "stream load/detector progress to stderr")
 	baseline := fs.String("baseline", "", "path to a saved report; gate only on findings NOT already in it")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
+	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
 	filter := addFilterFlags(fs)
-	_ = fs.Parse(os.Args[2:])
+	mustParse(fs)
 
 	args := fs.Args()
 	if len(args) == 0 {
@@ -395,7 +415,8 @@ func runCheck() {
 
 	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
-		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose), Vuln: *vuln,
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+		Vuln: *vuln, IncludeGenerated: *inclGen,
 	})
 	if err != nil {
 		exitScanError(err)

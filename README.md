@@ -108,6 +108,11 @@ detector:go-version  # we pin Go deliberately
 
 It's honored by both the CLI and the MCP server; the count is reported as `ignored`.
 
+**Generated code is skipped automatically.** Files carrying the standard `// Code generated … DO NOT
+EDIT.` marker (protobuf, mocks, stringer, …) never contribute findings — the fix belongs in the
+generator, not its output. The count is reported as `generated`; pass `-include-generated` to scan
+them anyway.
+
 ### Adopt on a noisy repo: baseline mode
 
 An existing codebase can surface hundreds of findings. Snapshot them once, then only see — or gate

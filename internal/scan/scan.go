@@ -31,6 +31,8 @@ type Options struct {
 	GraphScope string       // file-path substring used to scope graph queries
 	Progress   func(string) // optional; called with human-readable progress lines (verbose mode)
 	Vuln       bool         // run govulncheck (opt-in: slow, needs the vuln DB)
+
+	IncludeGenerated bool // scan generated files too (default: findings in "DO NOT EDIT" files are dropped)
 }
 
 // Report is the report-only output of a scan.
@@ -44,7 +46,8 @@ type Report struct {
 	ScanMillis     int64            `json:"scan_millis"`
 	FindingCount   int              `json:"finding_count"`
 	Suppressed     int              `json:"suppressed"`
-	Ignored        int              `json:"ignored,omitempty"` // dropped by a .gospectignore rule
+	Generated      int              `json:"generated,omitempty"` // dropped as findings in generated ("DO NOT EDIT") files
+	Ignored        int              `json:"ignored,omitempty"`   // dropped by a .gospectignore rule
 	SkippedModules []string         `json:"skipped_modules,omitempty"`
 	ByCategory     map[string]int   `json:"by_category"`
 	BySeverity     map[string]int   `json:"by_severity"`
@@ -156,6 +159,12 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	// Honor //gospect:ignore directives: authors mark intentional code so it drops from the report.
 	findings, suppressed := detect.ApplySuppressions(findings)
 
+	// Findings in generated code are noise (fix belongs in the generator); drop them by default.
+	var generated int
+	if !opt.IncludeGenerated {
+		findings, generated = dropGenerated(findings)
+	}
+
 	// Stable identity per finding (line-independent) for baseline matching and SARIF dedup.
 	for i := range findings {
 		findings[i].Fingerprint = fingerprint(dir, findings[i])
@@ -172,6 +181,7 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		LoadMillis:     stats.Duration.Milliseconds(),
 		ScanMillis:     time.Since(start).Milliseconds(),
 		Suppressed:     suppressed,
+		Generated:      generated,
 		SkippedModules: stats.Skipped,
 		GraphError:     graphErr,
 		Findings:       findings,
