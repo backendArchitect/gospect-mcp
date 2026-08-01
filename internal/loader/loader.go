@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/tools/go/packages"
@@ -66,27 +69,57 @@ func LoadWithProgress(dir string, progress func(string), patterns ...string) ([]
 	}
 
 	start := time.Now()
+
+	// A single explicit target failing to load is the scan's own failure — surface it directly
+	// (and keep the simple synchronous path).
+	if len(roots) == 1 {
+		if progress != nil {
+			progress(fmt.Sprintf("loading %s", relDir(dir, roots[0])))
+		}
+		pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: roots[0]}, patterns...)
+		if err != nil {
+			return nil, Stats{}, err
+		}
+		return finalize(pkgs, roots, start)
+	}
+
+	// Multi-module (monorepo): load modules concurrently — they're independent, and the load is the
+	// slow half of a big scan. One broken module (bad vendoring, private dep) must not abort the
+	// rest, so a per-module error is recorded and skipped, never fatal.
+	type result struct {
+		root string
+		pkgs []*packages.Package
+		err  error
+	}
+	results := make([]result, len(roots))
+	sem := make(chan struct{}, loadConcurrency(len(roots)))
+	var wg sync.WaitGroup
+	var done int32
+	for i, root := range roots {
+		wg.Add(1)
+		go func(i int, root string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: root}, patterns...)
+			results[i] = result{root, pkgs, err}
+			if progress != nil {
+				progress(fmt.Sprintf("loaded module %d/%d: %s", atomic.AddInt32(&done, 1), len(roots), relDir(dir, root)))
+			}
+		}(i, root)
+	}
+	wg.Wait()
+
 	var all []*packages.Package
 	var skipped []string
-	loaded := roots[:0:0] // module roots that actually loaded (excludes the skipped ones)
-	for i, root := range roots {
-		if progress != nil {
-			progress(fmt.Sprintf("loading module %d/%d: %s", i+1, len(roots), relDir(dir, root)))
-		}
-		cfg := &packages.Config{Mode: packages.LoadAllSyntax, Dir: root}
-		pkgs, err := packages.Load(cfg, patterns...)
-		if err != nil {
-			// A single explicit target failing to load is the scan's failure — surface it.
-			// In a monorepo, one broken module (bad vendoring, private dep) must not abort
-			// the rest: record why it was skipped and keep going.
-			if len(roots) == 1 {
-				return nil, Stats{}, err
-			}
-			skipped = append(skipped, fmt.Sprintf("%s: %s", root, firstLine(err)))
+	loaded := roots[:0:0]
+	for _, r := range results {
+		if r.err != nil {
+			skipped = append(skipped, fmt.Sprintf("%s: %s", r.root, firstLine(r.err)))
 			continue
 		}
-		all = append(all, pkgs...)
-		loaded = append(loaded, root)
+		all = append(all, r.pkgs...)
+		loaded = append(loaded, r.root)
 	}
 	if len(all) == 0 {
 		return nil, Stats{}, fmt.Errorf("all %d module(s) failed to load:\n  %s", len(roots), strings.Join(skipped, "\n  "))
@@ -97,6 +130,29 @@ func LoadWithProgress(dir string, progress func(string), patterns ...string) ([]
 		stats.Errors += len(p.Errors)
 	})
 	return all, stats, nil
+}
+
+// finalize builds Stats for a fully-loaded single-module result.
+func finalize(pkgs []*packages.Package, roots []string, start time.Time) ([]*packages.Package, Stats, error) {
+	stats := Stats{Duration: time.Since(start), Packages: len(pkgs), Roots: roots}
+	packages.Visit(pkgs, nil, func(p *packages.Package) {
+		stats.Errors += len(p.Errors)
+	})
+	return pkgs, stats, nil
+}
+
+// loadConcurrency bounds how many modules load at once. packages.Load already parallelizes
+// internally, so this stays modest to avoid oversubscribing the CPU while still overlapping the
+// per-module compile/type-check latency.
+func loadConcurrency(modules int) int {
+	n := runtime.NumCPU() / 2
+	if n < 2 {
+		n = 2
+	}
+	if n > modules {
+		n = modules
+	}
+	return n
 }
 
 // relDir renders root relative to base for compact progress lines, falling back to root itself

@@ -228,11 +228,11 @@ Warm-cache, single machine:
 |---|---|---|---|
 | Single small module | ~12 | ~1s | load ~0.9s / scan ~0.1s |
 | Mid-size module | 272 | ~2.5s | load ~2.1s / scan ~0.5s |
-| Full 9-module monorepo | 458 | ~30s | one command, every service |
+| Full 9-module monorepo | 458 | ~26s | modules load in parallel |
 
 The **first** scan of a big repo is slower while Go compiles its dependencies once; subsequent scans
-are fast. Scope with a package pattern (`./somepkg/...`) for instant results, and use `-verbose` to
-watch progress on a long run.
+are fast. Monorepo modules load concurrently. Scope with a package pattern (`./somepkg/...`) for
+instant results, and use `-verbose` to watch progress on a long run.
 
 ---
 

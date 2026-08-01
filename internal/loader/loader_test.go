@@ -59,6 +59,39 @@ func TestLoad_NotGoError(t *testing.T) {
 	}
 }
 
+// TestLoad_ParallelMultiModule verifies every module in a monorepo is loaded (concurrently) and
+// reported in Stats.Roots.
+func TestLoad_ParallelMultiModule(t *testing.T) {
+	dir := t.TempDir()
+	for _, m := range []string{"svc-a", "svc-b", "svc-c"} {
+		mustWrite(t, filepath.Join(dir, m, "go.mod"), "module example.com/"+m+"\n\ngo 1.21\n")
+		mustWrite(t, filepath.Join(dir, m, "main.go"), "package main\n\nfunc main() {}\n")
+	}
+	pkgs, stats, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats.Roots) != 3 {
+		t.Fatalf("loaded %d module roots, want 3: %v", len(stats.Roots), stats.Roots)
+	}
+	if len(pkgs) < 3 {
+		t.Fatalf("loaded %d packages, want at least 3 (one per module)", len(pkgs))
+	}
+	if len(stats.Skipped) != 0 {
+		t.Fatalf("unexpected skips: %v", stats.Skipped)
+	}
+}
+
+func TestLoadConcurrency(t *testing.T) {
+	// Never below 2, never above the module count.
+	if got := loadConcurrency(1); got != 1 {
+		t.Errorf("loadConcurrency(1) = %d, want 1", got)
+	}
+	if got := loadConcurrency(100); got < 2 {
+		t.Errorf("loadConcurrency(100) = %d, want >= 2", got)
+	}
+}
+
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
