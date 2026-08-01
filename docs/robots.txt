@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://backendarchitect.github.io/gospect-mcp/sitemap.xml

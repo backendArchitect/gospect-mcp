@@ -3,175 +3,346 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gospect-mcp — a Go-only, report-first code scanner (MCP)</title>
-<meta name="description" content="gospect-mcp runs the real Go toolchain over your code and reports genuine bugs, dead code, stale docs and outdated APIs — as an MCP server or a CLI. It never edits your code.">
+
+<!-- Primary SEO -->
+<title>gospect-mcp — Report-First Go Code Scanner &amp; Bug Finder (MCP Server + CLI)</title>
+<meta name="description" content="gospect-mcp is a Go-only, report-first static analysis tool. It runs the real Go toolchain (go/analysis, SSA) to find genuine bugs — nil derefs, leaked contexts, unchecked errors — as an MCP server or CLI. It never edits your code.">
+<meta name="keywords" content="go static analysis, golang bug finder, go code scanner, go linter, MCP server, model context protocol, go security scanner, govulncheck, SARIF, go nil dereference, go monorepo linter, AI code review, claude code, cursor MCP">
+<meta name="author" content="backendArchitect">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#07090e" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fbfcfe" media="(prefers-color-scheme: light)">
+<link rel="canonical" href="https://backendarchitect.github.io/gospect-mcp/">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="gospect-mcp">
+<meta property="og:url" content="https://backendarchitect.github.io/gospect-mcp/">
+<meta property="og:title" content="gospect-mcp — Report-First Go Code Scanner (MCP)">
+<meta property="og:description" content="A deterministic sensor for your Go code. Finds genuine bugs with the real Go toolchain; never rewrites your code. Works with any AI agent over MCP.">
+<meta property="og:image" content="https://backendarchitect.github.io/gospect-mcp/og.png">
+<meta property="og:image:alt" content="gospect-mcp — report-first Go code scanner">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="gospect-mcp — Report-First Go Code Scanner (MCP)">
+<meta name="twitter:description" content="A deterministic sensor for your Go code. Finds genuine bugs; never rewrites your code. MCP server + CLI.">
+<meta name="twitter:image" content="https://backendarchitect.github.io/gospect-mcp/og.png">
+
+<!-- Structured data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "gospect-mcp",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "description": "A Go-only, report-first code scanner exposed as an MCP server and CLI. Runs the real Go toolchain to report genuine bugs, dead code and stale docs. It never edits your code.",
+  "url": "https://backendarchitect.github.io/gospect-mcp/",
+  "downloadUrl": "https://github.com/backendArchitect/gospect-mcp/releases",
+  "codeRepository": "https://github.com/backendArchitect/gospect-mcp",
+  "programmingLanguage": "Go",
+  "keywords": "go static analysis, golang bug finder, MCP server, SARIF, govulncheck",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "backendArchitect" }
+}
+</script>
+
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%8D%3C/text%3E%3C/svg%3E">
 <style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3; --muted: #9aa4b2;
-    --accent: #00ADD8; --accent-2: #8A2BE2; --code-bg: #010409;
+  :root{
+    --bg:#07090e; --bg2:#0b0f17; --panel:rgba(255,255,255,.03); --panel-solid:#0f1420;
+    --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.14);
+    --fg:#e8edf5; --muted:#9aa6b8; --faint:#6b7688;
+    --teal:#2dd4bf; --cyan:#38bdf8; --violet:#a78bfa; --go:#00ADD8;
+    --radius:16px; --maxw:1080px;
+    --grad:linear-gradient(120deg,#38bdf8,#2dd4bf 45%,#a78bfa);
   }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de; --fg: #1f2328; --muted: #59636e;
-            --accent: #007d9c; --accent-2: #6f2bd6; --code-bg: #f6f8fa; }
+  @media (prefers-color-scheme:light){
+    :root{ --bg:#fbfcfe; --bg2:#f3f6fb; --panel:rgba(9,12,20,.02); --panel-solid:#ffffff;
+      --border:rgba(9,12,20,.10); --border-strong:rgba(9,12,20,.16);
+      --fg:#0c1220; --muted:#4a5568; --faint:#7a8699;
+      --grad:linear-gradient(120deg,#0284c7,#0d9488 45%,#7c3aed);}
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
-        padding: 14px 16px; overflow-x: auto; font-size: 14px; }
-  pre code { background: none; padding: 0; }
-  code { background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
-         padding: 1px 5px; font-size: 0.88em; }
-  header.hero { text-align: center; padding: 72px 0 40px; border-bottom: 1px solid var(--border); }
-  .hero h1 { font-size: 2.6rem; margin: 0 0 8px; letter-spacing: -0.02em; }
-  .hero .tag { color: var(--muted); font-size: 1.15rem; max-width: 620px; margin: 0 auto 24px; }
-  .pill { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
-          border: 1px solid var(--border); color: var(--muted); margin: 2px; }
-  .btns { margin-top: 26px; }
-  .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; font-weight: 600; margin: 4px; }
-  .btn.primary { background: var(--accent); color: #001b22; }
-  .btn.ghost { border: 1px solid var(--border); color: var(--fg); }
-  section { padding: 44px 0; border-bottom: 1px solid var(--border); }
-  h2 { font-size: 1.6rem; margin: 0 0 16px; letter-spacing: -0.01em; }
-  h3 { font-size: 1.05rem; margin: 22px 0 6px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
-  .card h3 { margin-top: 0; color: var(--accent); }
-  .card p { margin: 6px 0 0; color: var(--muted); font-size: 0.95rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; }
-  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .muted { color: var(--muted); }
-  footer { text-align: center; padding: 34px 0 60px; color: var(--muted); font-size: 0.9rem; }
-  .tablewrap { overflow-x: auto; }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.65 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  /* ambient glow */
+  body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(60% 50% at 50% -8%, rgba(56,189,248,.18), transparent 60%),
+      radial-gradient(45% 45% at 88% 8%, rgba(167,139,250,.14), transparent 60%),
+      radial-gradient(50% 40% at 5% 22%, rgba(45,212,191,.12), transparent 60%),
+      linear-gradient(180deg,var(--bg),var(--bg2));}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* nav */
+  header.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(160%) blur(14px);
+    background:color-mix(in srgb, var(--bg) 72%, transparent);border-bottom:1px solid var(--border)}
+  .nav .wrap{display:flex;align-items:center;gap:18px;height:62px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em;font-size:1.05rem}
+  .brand .dot{font-size:1.15rem}
+  .nav nav{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .nav nav a{padding:8px 12px;border-radius:9px;color:var(--muted);font-size:.92rem;font-weight:500}
+  .nav nav a:hover{color:var(--fg);background:var(--panel)}
+  .nav .cta{border:1px solid var(--border-strong);color:var(--fg)}
+  @media(max-width:680px){.nav nav a.hide{display:none}}
+
+  /* hero */
+  .hero{text-align:center;padding:96px 0 60px}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted);
+    border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:6px 14px;margin-bottom:26px}
+  .badge b{color:var(--teal);font-weight:600}
+  .hero h1{font-size:clamp(2.4rem,6vw,4rem);line-height:1.04;letter-spacing:-.035em;margin:0 0 20px;font-weight:800}
+  .hero p.sub{color:var(--muted);font-size:clamp(1.05rem,2.3vw,1.3rem);max-width:660px;margin:0 auto 34px;line-height:1.55}
+  .btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 24px;border-radius:12px;font-weight:600;font-size:.98rem;
+    transition:transform .15s ease, box-shadow .15s ease, background .15s ease}
+  .btn.primary{background:var(--grad);color:#04121a;box-shadow:0 10px 30px -8px rgba(56,189,248,.5)}
+  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px -10px rgba(56,189,248,.6)}
+  .btn.ghost{border:1px solid var(--border-strong);color:var(--fg);background:var(--panel)}
+  .btn.ghost:hover{transform:translateY(-2px);border-color:var(--teal)}
+  .hero .stats{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;margin-top:52px;color:var(--muted)}
+  .hero .stats b{display:block;font-size:1.5rem;color:var(--fg);font-weight:700;letter-spacing:-.02em}
+  .hero .stats span{font-size:.85rem}
+
+  /* terminal window */
+  .term{max-width:760px;margin:56px auto 0;text-align:left;border:1px solid var(--border);
+    border-radius:14px;overflow:hidden;background:#05070c;box-shadow:0 30px 80px -30px rgba(0,0,0,.7)}
+  @media(prefers-color-scheme:light){.term{background:#0b0f17}}
+  .term .bar{display:flex;align-items:center;gap:7px;padding:11px 15px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02)}
+  .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .term .bar i:nth-child(1){background:#ff5f57}.term .bar i:nth-child(2){background:#febc2e}.term .bar i:nth-child(3){background:#28c840}
+  .term .bar span{margin-left:8px;color:#7a8699;font-size:.78rem;font-family:inherit}
+  .term pre{margin:0;padding:18px 20px;font-size:13.5px;line-height:1.7;color:#cdd6e4;overflow-x:auto}
+  .term .c-cmd{color:#e8edf5}.term .c-flag{color:#38bdf8}.term .c-dim{color:#6b7688}
+  .term .c-hi{color:#ff6b6b;font-weight:600}.term .c-md{color:#febc2e}.term .c-ok{color:#2dd4bf}
+
+  /* sections */
+  section{padding:70px 0;border-top:1px solid var(--border)}
+  .eyebrow{color:var(--teal);font-weight:600;font-size:.82rem;letter-spacing:.14em;text-transform:uppercase;margin:0 0 10px}
+  h2{font-size:clamp(1.7rem,3.5vw,2.3rem);letter-spacing:-.025em;margin:0 0 14px;font-weight:800}
+  section > .wrap > p.lead{color:var(--muted);font-size:1.08rem;max-width:640px;margin:0 0 34px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px;
+    transition:transform .18s ease,border-color .18s ease,background .18s ease}
+  .card:hover{transform:translateY(-4px);border-color:var(--border-strong);background:color-mix(in srgb,var(--panel) 60%,var(--teal) 4%)}
+  .card .ico{font-size:1.5rem;display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;
+    background:color-mix(in srgb,var(--teal) 16%,transparent);margin-bottom:14px}
+  .card h3{margin:0 0 6px;font-size:1.08rem;font-weight:700}
+  .card p{margin:0;color:var(--muted);font-size:.94rem;line-height:1.55}
+
+  /* code block with copy */
+  .code{position:relative;background:var(--panel-solid);border:1px solid var(--border);border-radius:12px;margin:12px 0}
+  .code pre{margin:0;padding:15px 54px 15px 17px;overflow-x:auto;font-size:13.5px;line-height:1.6;color:var(--fg)}
+  .code .copy{position:absolute;top:9px;right:9px;border:1px solid var(--border);background:var(--bg2);color:var(--muted);
+    border-radius:8px;padding:5px 9px;font-size:.72rem;cursor:pointer;font-family:inherit;transition:.15s}
+  .code .copy:hover{color:var(--fg);border-color:var(--teal)}
+  .code .copy.done{color:var(--teal);border-color:var(--teal)}
+  .lbl{font-size:.82rem;color:var(--faint);margin:20px 0 2px;font-weight:600}
+
+  /* table */
+  .tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--panel)}
+  table{width:100%;border-collapse:collapse;font-size:.95rem;min-width:520px}
+  th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--border)}
+  tbody tr:last-child td{border-bottom:none}
+  th{color:var(--faint);font-weight:600;font-size:.8rem;letter-spacing:.05em;text-transform:uppercase}
+  td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:"JetBrains Mono",monospace}
+  td .pk{color:var(--teal);font-weight:700}
+  .muted{color:var(--muted)}
+
+  /* pills */
+  .pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .pillc{border:1px solid var(--border);background:var(--panel);border-radius:11px;padding:10px 15px;font-size:.9rem;font-weight:500;
+    transition:.15s}
+  .pillc:hover{border-color:var(--teal);transform:translateY(-2px)}
+  .pillc b{color:var(--teal)}
+
+  footer{padding:46px 0 64px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:.9rem}
+  footer .grad-text{font-weight:700}
 </style>
 </head>
 <body>
 
-<header class="hero">
+<header class="nav">
   <div class="wrap">
-    <h1>🔍 gospect-mcp</h1>
-    <p class="tag">A Go-only, <strong>report-first</strong> code scanner. It runs the real Go
-      toolchain over your code and <strong>reports</strong> genuine bugs — as an MCP server or a
-      CLI. It never edits your code.</p>
-    <div>
-      <span class="pill">Go 1.21+</span>
-      <span class="pill">MCP server + CLI</span>
-      <span class="pill">No LLM in the server</span>
-      <span class="pill">Report-first</span>
-    </div>
-    <div class="btns">
-      <a class="btn primary" href="https://github.com/backendArchitect/gospect-mcp">GitHub&nbsp;→</a>
-      <a class="btn ghost" href="#install">Install</a>
-    </div>
+    <a class="brand" href="#top"><span class="dot">🔍</span> gospect-mcp</a>
+    <nav>
+      <a class="hide" href="#features">Features</a>
+      <a class="hide" href="#install">Install</a>
+      <a class="hide" href="#perf">Performance</a>
+      <a class="hide" href="#agents">Agents</a>
+      <a class="btn ghost cta" href="https://github.com/backendArchitect/gospect-mcp" style="padding:8px 16px">★ GitHub</a>
+    </nav>
   </div>
 </header>
 
-<section>
+<a id="top"></a>
+<div class="hero">
   <div class="wrap">
-    <h2>Why gospect-mcp</h2>
-    <p>Ask an AI assistant to “find bugs” and roughly one in fifteen is a real defect — the rest are
-      confident guesses. gospect-mcp is the opposite: a deterministic <em>sensor</em> that is certain
-      about a small set of things and hands the judgment back to you.</p>
+    <span class="badge">🛰️ <b>Report-first</b> · runs the real Go toolchain · no LLM in the server</span>
+    <h1>Find the bugs that are <span class="grad-text">actually real</span>.</h1>
+    <p class="sub">A Go-only code scanner that reports genuine bugs, dead code and stale docs —
+      then stops. It never rewrites your code. A sensor, not an oracle.</p>
+    <div class="btns">
+      <a class="btn primary" href="#install">Get started →</a>
+      <a class="btn ghost" href="https://github.com/backendArchitect/gospect-mcp">View on GitHub</a>
+    </div>
+
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i><span>gospect-mcp scan -format text ./service</span></div>
+<pre><span class="c-dim">$</span> <span class="c-cmd">gospect-mcp scan <span class="c-flag">-format text</span> ./service</span>
+gospect: 6 finding(s) in ./service (272 packages, 1 module)
+  [<span class="c-hi">high</span>  ] nilness          handler.go:41
+           nil dereference in HandleCheckout
+  [<span class="c-md">medium</span>] unchecked-error  store.go:88
+           error return value is not checked
+  [<span class="c-md">medium</span>] lostcancel       worker.go:23
+           the context.CancelFunc is never called
+  <span class="c-dim">… bugs sorted to the top, generated files skipped</span>
+<span class="c-dim">$</span> <span class="c-ok">▮</span></pre>
+    </div>
+
+    <div class="stats">
+      <div><b>~2.5s</b><span>272 packages, warm</span></div>
+      <div><b>1&nbsp;binary</b><span>any MCP client</span></div>
+      <div><b>0</b><span>lines it edits</span></div>
+      <div><b>8+</b><span>bug detectors</span></div>
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">Why gospect-mcp</p>
+    <h2>Ground truth, not a confident guess.</h2>
+    <p class="lead">Ask an AI to “find bugs” and roughly one in fifteen is real — the rest are
+      plausible guesses. gospect is deterministic: it’s certain about a small set of things, and
+      hands the judgment back to you.</p>
     <div class="grid">
-      <div class="card"><h3>Report-first</h3><p>The output is a report. It never touches your code —
-        fixes are a separate, explicitly-invoked step.</p></div>
-      <div class="card"><h3>Sensor, not oracle</h3><p>Pure Go tooling (<code>go/packages</code>,
-        <code>go/analysis</code>, SSA). No LLM in the server — your MCP host supplies the intelligence.</p></div>
-      <div class="card"><h3>Genuine over noisy</h3><p>Semantically-backed findings, not grep guesses.
-        Generated code is skipped automatically; noise is suppressible per-line and repo-wide.</p></div>
-      <div class="card"><h3>Monorepo-native</h3><p>Point it at the repo root — every nested
-        <code>go.mod</code> is discovered and scanned in one run.</p></div>
+      <div class="card"><div class="ico">🛰️</div><h3>Report-first</h3>
+        <p>The output is a report. It never touches your code — fixes are a separate, explicitly-invoked step.</p></div>
+      <div class="card"><div class="ico">🧠</div><h3>Sensor, not oracle</h3>
+        <p>Pure Go tooling — <code>go/packages</code>, <code>go/analysis</code>, SSA. No LLM in the server; your agent brings the judgment.</p></div>
+      <div class="card"><div class="ico">🎯</div><h3>Genuine over noisy</h3>
+        <p>Semantically-backed findings, not grep guesses. Generated code is skipped automatically.</p></div>
+      <div class="card"><div class="ico">📦</div><h3>Monorepo-native</h3>
+        <p>Point it at the repo root — every nested <code>go.mod</code> is discovered and scanned in one run.</p></div>
+      <div class="card"><div class="ico">🧹</div><h3>Noise, tamed</h3>
+        <p>Per-line <code>//gospect:ignore</code>, a repo-wide <code>.gospectignore</code>, and baseline mode for big repos.</p></div>
+      <div class="card"><div class="ico">🔗</div><h3>CI-ready</h3>
+        <p>Severity gates, SARIF for inline PR annotations, and optional <code>govulncheck</code> for CVE deps.</p></div>
     </div>
   </div>
 </section>
 
 <section id="install">
   <div class="wrap">
-    <h2>Install</h2>
+    <p class="eyebrow">Install</p>
+    <h2>Up and running in one line.</h2>
 
-    <h3>One-line install (macOS / Linux)</h3>
-<pre><code>curl -fsSL https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.sh | bash</code></pre>
+    <div class="lbl">macOS / Linux</div>
+    <div class="code"><button class="copy">Copy</button><pre>curl -fsSL https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.sh | bash</pre></div>
 
-    <h3>Windows (PowerShell)</h3>
-<pre><code>irm https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.ps1 | iex</code></pre>
+    <div class="lbl">Windows (PowerShell)</div>
+    <div class="code"><button class="copy">Copy</button><pre>irm https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.ps1 | iex</pre></div>
 
-    <h3>With Go</h3>
-<pre><code>go install github.com/backendArchitect/gospect-mcp@latest</code></pre>
+    <div class="lbl">With Go</div>
+    <div class="code"><button class="copy">Copy</button><pre>go install github.com/backendArchitect/gospect-mcp@latest</pre></div>
 
-    <h3>Prebuilt binaries</h3>
-    <p class="muted">Linux / macOS / Windows, amd64 &amp; arm64 —
-      <a href="https://github.com/backendArchitect/gospect-mcp/releases">Releases page</a>.</p>
-
-    <h3>Then scan</h3>
-<pre><code>gospect-mcp scan /path/to/your/module ./...</code></pre>
-    <p class="muted">Findings come out as JSON, ordered by importance — bugs first. Run
-      <code>gospect-mcp help</code> for every command and flag.</p>
+    <div class="lbl">Then scan</div>
+    <div class="code"><button class="copy">Copy</button><pre>gospect-mcp scan /path/to/your/module ./...</pre></div>
+    <p class="muted" style="margin-top:14px">Prebuilt binaries (Linux / macOS / Windows · amd64 &amp; arm64) live on the
+      <a class="grad-text" href="https://github.com/backendArchitect/gospect-mcp/releases">Releases page</a>.
+      Run <code>gospect-mcp help</code> for every command and flag.</p>
   </div>
 </section>
 
-<section>
+<section id="perf">
   <div class="wrap">
-    <h2>Performance</h2>
-    <p>gospect builds on the Go type-checker, so it’s bounded by <code>go build</code>, not by the
-      tool. Warm-cache, single machine:</p>
+    <p class="eyebrow">Performance</p>
+    <h2>Fast, because it’s bounded by <code>go build</code> — not the tool.</h2>
+    <p class="lead">Warm-cache, single machine. The first scan of a big repo compiles its
+      dependencies once; every scan after that is fast.</p>
     <div class="tablewrap">
-    <table>
-      <thead><tr><th>Scope</th><th>Packages</th><th>Time</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr><td>Single small module</td><td class="num">~12</td><td class="num">~1s</td><td class="muted">this repo</td></tr>
-        <tr><td>Mid-size module</td><td class="num">272</td><td class="num">~2.5s</td><td class="muted">load 2.1s / scan 0.5s</td></tr>
-        <tr><td>Full 9-module monorepo</td><td class="num">458</td><td class="num">~30s</td><td class="muted">one command, all services</td></tr>
-      </tbody>
-    </table>
+      <table>
+        <thead><tr><th>Scope</th><th>Packages</th><th>Time</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Single small module</td><td class="num"><span class="pk">~12</span></td><td class="num">~1s</td><td class="muted">load 0.9s / scan 0.1s</td></tr>
+          <tr><td>Mid-size module</td><td class="num"><span class="pk">272</span></td><td class="num">~2.5s</td><td class="muted">load 2.1s / scan 0.5s</td></tr>
+          <tr><td>Full 9-module monorepo</td><td class="num"><span class="pk">458</span></td><td class="num">~30s</td><td class="muted">one command, every service</td></tr>
+        </tbody>
+      </table>
     </div>
-    <p class="muted">The <strong>first</strong> scan of a big repo is slower while Go compiles its
-      dependencies once; subsequent scans are fast. Scope with a package pattern for instant results.</p>
   </div>
 </section>
 
-<section>
+<section id="agents">
   <div class="wrap">
-    <h2>Works with any AI agent</h2>
-    <p>gospect speaks the Model Context Protocol over stdio, so <strong>any</strong> MCP client can
-      use it. And because every scan is stateless, you can point as many agents at it as you like —
-      there’s nothing to coordinate.</p>
-    <h3>Claude Code</h3>
-<pre><code>claude mcp add gospect gospect-mcp</code></pre>
-    <h3>Any MCP client (Cursor, Windsurf, Cline, VS Code, Zed, …)</h3>
-<pre><code>{
+    <p class="eyebrow">Multi-agent</p>
+    <h2>Works with every AI agent. Fan out freely.</h2>
+    <p class="lead">gospect speaks MCP over stdio, so any client can use it. Every scan is
+      stateless — no shared index, no daemon — so point as many agents at it as you like with
+      nothing to coordinate.</p>
+    <div class="pills">
+      <div class="pillc"><b>Claude Code</b></div>
+      <div class="pillc">Cursor</div>
+      <div class="pillc">Windsurf</div>
+      <div class="pillc">Cline</div>
+      <div class="pillc">VS Code</div>
+      <div class="pillc">Zed</div>
+      <div class="pillc">Codex CLI</div>
+      <div class="pillc">Gemini CLI</div>
+      <div class="pillc">Claude Desktop</div>
+    </div>
+    <div class="lbl">Claude Code</div>
+    <div class="code"><button class="copy">Copy</button><pre>claude mcp add gospect gospect-mcp</pre></div>
+    <div class="lbl">Any MCP client</div>
+    <div class="code"><button class="copy">Copy</button><pre>{
   "mcpServers": {
     "gospect": { "command": "gospect-mcp", "args": [] }
   }
-}</code></pre>
-    <p class="muted">Report-only means an agent <em>cannot</em> change your code through gospect —
-      only surface findings and, on request, a fix envelope.</p>
+}</pre></div>
+    <p class="muted" style="margin-top:14px">Report-only means an agent <em>can’t</em> change your code through gospect —
+      only surface findings, and, on request, a fix envelope.</p>
   </div>
 </section>
 
-<section>
+<section id="ci">
   <div class="wrap">
-    <h2>In CI</h2>
-<pre><code>gospect-mcp check -fail-on high .                   # exit non-zero on any high-severity bug
-gospect-mcp scan -format sarif . &gt; gospect.sarif    # SARIF for GitHub code scanning
-gospect-mcp scan -vuln .                            # optional: govulncheck for known-CVE deps</code></pre>
-    <p class="muted">A drop-in GitHub Action can upload SARIF so findings appear as inline PR
-      annotations. Baseline mode (<code>-baseline</code>) lets you gate only on <em>new</em> findings,
-      so you can adopt gospect on a repo that already has hundreds.</p>
+    <p class="eyebrow">In CI</p>
+    <h2>Gate PRs. Annotate diffs. Adopt on messy repos.</h2>
+    <div class="code"><button class="copy">Copy</button><pre>gospect-mcp check -fail-on high .                   # fail the build on any high-severity bug
+gospect-mcp scan -format sarif . &gt; gospect.sarif    # SARIF → inline PR annotations
+gospect-mcp check -baseline base.json .             # gate only on NEW findings</pre></div>
+    <p class="muted" style="margin-top:14px">A drop-in GitHub Action uploads SARIF so findings show up right on the pull
+      request. Baseline mode lets you turn gospect on for a repo that already has hundreds of findings.</p>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <p>Open source · <a href="https://github.com/backendArchitect/gospect-mcp">github.com/backendArchitect/gospect-mcp</a></p>
+    <p>Open source · <a class="grad-text" href="https://github.com/backendArchitect/gospect-mcp">github.com/backendArchitect/gospect-mcp</a></p>
+    <p class="muted" style="margin-top:6px">Built with a “deletion over addition, boring over clever” philosophy.</p>
   </div>
 </footer>
 
+<script>
+  document.querySelectorAll('.code .copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pre = btn.parentElement.querySelector('pre');
+      navigator.clipboard.writeText(pre.innerText.replace(/​/g,'')).then(function(){
+        btn.textContent='Copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent='Copy'; btn.classList.remove('done'); }, 1600);
+      });
+    });
+  });
+</script>
 </body>
 </html>
