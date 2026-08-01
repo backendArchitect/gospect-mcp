@@ -96,6 +96,43 @@ _ = risky()       //gospect:ignore unchecked-error  // suppress only these detec
 Suppressed findings drop from the report; the count is reported as `suppressed`. To silence a whole
 detector across a run instead, use `check -ignore <detector,...>`.
 
+For repo-wide, checked-in suppression, add a **`.gospectignore`** at the module root:
+
+```gitignore
+# .gospectignore — one rule per line
+*.pb.go              # skip generated protobuf
+mocks/               # skip a whole directory (path glob or substring)
+detector:todo        # never report TODO markers
+detector:go-version  # we pin Go deliberately
+```
+
+It's honored by both the CLI and the MCP server; the count is reported as `ignored`.
+
+### Adopt on a noisy repo: baseline mode
+
+An existing codebase can surface hundreds of findings. Snapshot them once, then only see — or gate
+on — what's **new**:
+
+```sh
+gospect-mcp scan . > gospect-baseline.json          # snapshot today's findings (commit this)
+gospect-mcp scan  -baseline gospect-baseline.json .  # later: shows only NEW findings
+gospect-mcp check -baseline gospect-baseline.json -fail-on medium .   # CI fails only on new ones
+```
+
+Matching is by a line-independent fingerprint (detector + path + message), so a pre-existing finding
+that merely shifts lines stays baselined.
+
+### GitHub code scanning (SARIF) & vulnerabilities
+
+```sh
+gospect-mcp scan -format sarif . > gospect.sarif     # upload via github/codeql-action/upload-sarif
+gospect-mcp scan -vuln .                             # also run govulncheck for known-CVE deps
+```
+
+`-format sarif` emits SARIF 2.1.0 so findings appear as inline PR annotations. `-vuln` is opt-in
+(it's slow and needs the vulnerability database); if `govulncheck` isn't installed it says so
+instead of failing.
+
 > Prefer building it yourself? See [From source](#from-source).
 
 ### Keeping up to date

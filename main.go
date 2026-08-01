@@ -87,8 +87,11 @@ Flags (scan, check):
   -category <a,b>     keep only these categories (e.g. bug,missing)
   -detector <a,b>     keep only these detectors (e.g. nilness)
   -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
+  -baseline <file>    a saved report; show/gate only findings NOT already in it (adopt on noisy repos)
+  -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
 Flags (scan):
-  -format <fmt>       json|text (default json)
+  -format <fmt>       json|text|sarif (default json; sarif = GitHub code-scanning)
+  -exit-code          exit 1 if any findings remain (after filters/baseline)
 Flags (check):
   -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
   -ignore <a,b>       comma-separated detector names to skip
@@ -99,6 +102,7 @@ Findings are ordered by importance: bugs (high severity) first, then medium, the
 Notes:
   <dir> may be a single module or a monorepo root — every nested go.mod is scanned in one run.
   Mark intentional code with a //gospect:ignore [detector...] comment to drop it from the report.
+  A checked-in .gospectignore (path globs + detector:<name> rules) suppresses noise repo-wide.
 
 Docs: https://github.com/backendArchitect/gospect-mcp
 `)
@@ -109,7 +113,10 @@ Docs: https://github.com/backendArchitect/gospect-mcp
 func runScan() {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	verbose := fs.Bool("verbose", false, "stream load/detector progress and a summary to stderr")
-	format := fs.String("format", "json", "output format: json|text")
+	format := fs.String("format", "json", "output format: json|text|sarif")
+	baseline := fs.String("baseline", "", "path to a saved report; show only findings NOT already in it")
+	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
+	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	filter := addFilterFlags(fs)
 	_ = fs.Parse(os.Args[2:])
 
@@ -128,7 +135,7 @@ func runScan() {
 
 	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", args[0])
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
-		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose), Vuln: *vuln,
 	})
 	if err != nil {
 		exitScanError(err)
@@ -137,15 +144,38 @@ func runScan() {
 	if removed := rep.Apply(filter()); removed > 0 {
 		fmt.Fprintf(os.Stderr, "gospect: %d finding(s) filtered out by flags\n", removed)
 	}
+	applyBaseline(rep, *baseline)
 	if *verbose {
 		printScanSummary(rep)
 	}
-	if *format == "text" {
+	switch *format {
+	case "text":
 		printFindingsText(rep)
+	case "sarif":
+		out, _ := json.MarshalIndent(rep.SARIF(selfupdate.Current()), "", "  ")
+		fmt.Println(string(out))
+	default:
+		out, _ := json.MarshalIndent(rep, "", "  ")
+		fmt.Println(string(out))
+	}
+	if *exitCode && rep.FindingCount > 0 {
+		os.Exit(1)
+	}
+}
+
+// applyBaseline hides findings already present in a saved baseline report, so only new ones remain.
+func applyBaseline(rep *scan.Report, path string) {
+	if path == "" {
 		return
 	}
-	out, _ := json.MarshalIndent(rep, "", "  ")
-	fmt.Println(string(out))
+	base, err := scan.LoadBaseline(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "baseline error:", err)
+		os.Exit(2)
+	}
+	if hidden := rep.ApplyBaseline(base); hidden > 0 {
+		fmt.Fprintf(os.Stderr, "gospect: %d known finding(s) hidden by baseline %s\n", hidden, path)
+	}
 }
 
 // addFilterFlags registers the shared output-filter flags on fs and returns a closure that builds
@@ -348,6 +378,8 @@ func runCheck() {
 	format := fs.String("format", "text", "output format: text|json")
 	ignore := fs.String("ignore", "", "comma-separated detector names to ignore")
 	verbose := fs.Bool("verbose", false, "stream load/detector progress to stderr")
+	baseline := fs.String("baseline", "", "path to a saved report; gate only on findings NOT already in it")
+	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	filter := addFilterFlags(fs)
 	_ = fs.Parse(os.Args[2:])
 
@@ -363,7 +395,7 @@ func runCheck() {
 
 	fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
-		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose), Vuln: *vuln,
 	})
 	if err != nil {
 		exitScanError(err)
@@ -372,6 +404,7 @@ func runCheck() {
 	if removed := rep.Apply(filter()); removed > 0 {
 		fmt.Fprintf(os.Stderr, "gospect: %d finding(s) filtered out by flags\n", removed)
 	}
+	applyBaseline(rep, *baseline)
 
 	ignoreSet := map[string]bool{}
 	for _, d := range strings.Split(*ignore, ",") {

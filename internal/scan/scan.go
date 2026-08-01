@@ -30,6 +30,7 @@ type Options struct {
 	Graph      graph.Graph  // optional code-intelligence graph (e.g. codebase-memory-mcp)
 	GraphScope string       // file-path substring used to scope graph queries
 	Progress   func(string) // optional; called with human-readable progress lines (verbose mode)
+	Vuln       bool         // run govulncheck (opt-in: slow, needs the vuln DB)
 }
 
 // Report is the report-only output of a scan.
@@ -108,6 +109,15 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	}
 	for _, root := range modRoots {
 		fs, err := detect.RunModernize(root)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, fs...)
+	}
+	// Vulnerability scan is opt-in (slow, needs the vuln DB); off by default.
+	if opt.Vuln {
+		progress("running govulncheck (may fetch the vulnerability database)…")
+		fs, err := detect.RunVuln(modRoots)
 		if err != nil {
 			return nil, err
 		}
@@ -227,15 +237,17 @@ func categoryRank(c string) int {
 	switch c {
 	case "bug":
 		return 0
-	case "over-engineered":
+	case "vuln":
 		return 1
-	case "stale-doc":
+	case "over-engineered":
 		return 2
-	case "missing":
+	case "stale-doc":
 		return 3
-	case "modernize":
+	case "missing":
 		return 4
-	default:
+	case "modernize":
 		return 5
+	default:
+		return 6
 	}
 }
