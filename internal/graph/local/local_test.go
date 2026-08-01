@@ -105,6 +105,33 @@ func Branchy(x int) int {
 	}
 }
 
+func TestRouteFromCall(t *testing.T) {
+	str := func(s string) ast.Expr { return &ast.BasicLit{Kind: token.STRING, Value: `"` + s + `"`} }
+	nilArg := ast.Expr(&ast.Ident{Name: "nil"})
+
+	cases := []struct {
+		name       string
+		args       []ast.Expr
+		wantMethod string
+		wantPath   string
+		wantOK     bool
+	}{
+		{"GET", []ast.Expr{str("/users"), nilArg}, "GET", "/users", true},        // gin/echo/chi verb
+		{"HandleFunc", []ast.Expr{str("/health"), nilArg}, "", "/health", true},  // net/http
+		{"Method", []ast.Expr{str("get"), str("/x"), nilArg}, "GET", "/x", true}, // chi r.Method
+		{"GET", []ast.Expr{str("noslash"), nilArg}, "", "", false},               // not a path
+		{"Get", []ast.Expr{str("/x")}, "", "", false},                            // wrong case, not a verb
+		{"Query", []ast.Expr{str("/x")}, "", "", false},                          // unrelated method
+	}
+	for _, c := range cases {
+		m, p, ok := routeFromCall(c.name, c.args)
+		if ok != c.wantOK || m != c.wantMethod || p != c.wantPath {
+			t.Errorf("routeFromCall(%q,…) = (%q,%q,%v), want (%q,%q,%v)",
+				c.name, m, p, ok, c.wantMethod, c.wantPath, c.wantOK)
+		}
+	}
+}
+
 func write(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

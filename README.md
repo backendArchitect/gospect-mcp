@@ -296,11 +296,16 @@ Some detectors need whole-repo relationships single-package analysis can't see. 
   over conservative thresholds. No configuration.
 - **untested-exports** — opt-in with `-untested` (exported functions with no test in the same
   package). The built-in check is name-based and noisy on large repos, so it's off by default.
+- **stale-doc / swagger-drift** — runs automatically **when an OpenAPI/Swagger spec is present and
+  routes are found in the code**. gospect extracts registered routes from the AST (net/http
+  `Handle`/`HandleFunc`, and chi/gin/echo verb methods like `r.GET("/x", …)`) and flags documented
+  endpoints with no matching route. If no routes are detected it stays silent (no false positives).
 
-The route-based detectors (**unhandled-route**, **stale-doc / swagger-drift**) need a real call/route
-graph. gospect gets those by acting as an MCP **client** of a code-intelligence graph such as
-[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) — no graph of its own, no
-duplicated index. It also makes untested-exports more accurate (real TESTS edges instead of names).
+The remaining route detector, **unhandled-route** (a route declared with no handler), needs a real
+call/route graph. gospect gets that by acting as an MCP **client** of a code-intelligence graph such
+as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) — no graph of its own, no
+duplicated index. An external graph also makes untested-exports and swagger-drift more accurate
+(real TESTS/HANDLES edges instead of heuristics).
 
 Enable it with three env vars (all optional; unset = external graph disabled, built-in detectors
 still run):

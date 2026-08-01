@@ -185,9 +185,16 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 				func() ([]detect.Finding, error) { return detect.RunUntestedExports(ctx, g, scope) },
 			)
 		}
-		if opt.Graph != nil { // route detectors need the external graph
+		if opt.Graph != nil {
+			// External graph: full route detectors (it models HANDLES edges for missing-handler).
 			graphRuns = append(graphRuns,
 				func() ([]detect.Finding, error) { return detect.RunMissingHandlers(ctx, g) },
+				func() ([]detect.Finding, error) { return detect.RunStaleSwagger(ctx, g, dir) },
+			)
+		} else if rts, _ := g.Routes(ctx); len(rts) > 0 {
+			// Built-in graph: run stale-swagger only when routes were actually extracted — with an
+			// empty route set every documented endpoint would be a false "drift" positive.
+			graphRuns = append(graphRuns,
 				func() ([]detect.Finding, error) { return detect.RunStaleSwagger(ctx, g, dir) },
 			)
 		}

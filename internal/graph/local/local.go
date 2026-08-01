@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/backendArchitect/gospect-mcp/internal/graph"
@@ -103,9 +104,76 @@ func (l *Local) HighComplexity(_ context.Context, scope string, minCyclomatic, m
 	return out, nil
 }
 
-// UnhandledRoutes / Routes need HTTP-route knowledge the local graph doesn't build yet.
+// UnhandledRoutes needs to know a route was declared with no handler — an emptiness the AST can't
+// see (a registration call always passes a handler). It stays empty here; the external graph, which
+// models routes and HANDLES edges separately, answers it.
 func (l *Local) UnhandledRoutes(context.Context) ([]graph.Route, error) { return nil, nil }
-func (l *Local) Routes(context.Context) ([]graph.Route, error)          { return nil, nil }
+
+// httpVerbs are the method-named router calls (gin/echo/chi: r.GET("/x", h)).
+var httpVerbs = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "DELETE": true,
+	"PATCH": true, "HEAD": true, "OPTIONS": true, "CONNECT": true, "TRACE": true,
+}
+
+// Routes extracts registered HTTP routes from the AST across common routers — net/http
+// (Handle/HandleFunc), chi/gin/echo (verb methods, r.Method("GET", …)). It's a heuristic (a call
+// whose method is a verb/Handle with a leading-"/" string arg), which is why route-based findings
+// are report-first. Returns nothing when no such calls exist, so callers can avoid false positives.
+func (l *Local) Routes(_ context.Context) ([]graph.Route, error) {
+	var routes []graph.Route
+	for _, pkg := range l.pkgs {
+		for _, file := range pkg.Syntax {
+			ast.Inspect(file, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if m, p, ok := routeFromCall(sel.Sel.Name, call.Args); ok {
+					routes = append(routes, graph.Route{Method: m, Path: p})
+				}
+				return true
+			})
+		}
+	}
+	return routes, nil
+}
+
+// routeFromCall recognizes a route registration and returns its (method, path). method is "" for
+// method-agnostic registrations (net/http Handle/HandleFunc). ok is false unless the path is a
+// string literal beginning with "/".
+func routeFromCall(name string, args []ast.Expr) (method, path string, ok bool) {
+	switch {
+	case httpVerbs[name] && len(args) >= 1: // r.GET("/x", h)
+		if p, ok := strLit(args[0]); ok && strings.HasPrefix(p, "/") {
+			return name, p, true
+		}
+	case (name == "HandleFunc" || name == "Handle") && len(args) >= 1: // net/http, mux
+		if p, ok := strLit(args[0]); ok && strings.HasPrefix(p, "/") {
+			return "", p, true
+		}
+	case name == "Method" && len(args) >= 2: // chi: r.Method("GET", "/x", h)
+		m, okM := strLit(args[0])
+		p, okP := strLit(args[1])
+		if okM && okP && httpVerbs[strings.ToUpper(m)] && strings.HasPrefix(p, "/") {
+			return strings.ToUpper(m), p, true
+		}
+	}
+	return "", "", false
+}
+
+// strLit returns the value of a string-literal expression.
+func strLit(e ast.Expr) (string, bool) {
+	if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		if v, err := strconv.Unquote(lit.Value); err == nil {
+			return v, true
+		}
+	}
+	return "", false
+}
 
 // testedNames parses the _test.go files in dir and returns the set of identifiers they reference.
 // A referenced identifier includes selector fields (pkg.Foo -> "Foo"), so it catches both in-package
