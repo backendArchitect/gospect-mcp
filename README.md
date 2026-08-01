@@ -9,6 +9,8 @@
 <img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/c302ec7c-ce66-4429-b276-50c473d4c15c" />
 
 
+**🌐 Website:** [backendarchitect.github.io/gospect-mcp](https://backendarchitect.github.io/gospect-mcp/)
+
 **A Go-only, report-first code scanner exposed as an MCP server.** It indexes a Go module,
 runs deterministic analyzers, and **reports** genuine bugs, dead code, stale docs and outdated
 APIs. It **never modifies your code** — fixes are a separate, explicitly-invoked step.
@@ -175,9 +177,12 @@ entry from your MCP client config and any `GOSPECT_GRAPH_*` env vars.
 
 ---
 
-## Use it from your AI agent (MCP)
+## Multi-agent support
 
-`gospect-mcp` speaks the Model Context Protocol over stdio. Point any MCP host at the binary.
+`gospect-mcp` speaks the Model Context Protocol over stdio, so **any MCP client can use it** — no
+plugin, no adapter. And because every scan is **stateless** (nothing persists between calls, no
+shared index, no background daemon), you can point as many agents at it as you like with nothing to
+coordinate. One binary, any number of assistants.
 
 **Claude Code**
 
@@ -185,7 +190,9 @@ entry from your MCP client config and any `GOSPECT_GRAPH_*` env vars.
 claude mcp add gospect gospect-mcp
 ```
 
-**Manual config** (`~/.claude.json`, a project `.mcp.json`, Claude Desktop, Cursor, etc.):
+**Any other MCP client** — Cursor, Windsurf, Cline, VS Code (Continue/Copilot), Zed, Codex CLI,
+Gemini CLI, Claude Desktop — takes the same stdio config (`~/.claude.json`, a project `.mcp.json`,
+or the client's own MCP settings):
 
 ```json
 {
@@ -198,8 +205,34 @@ claude mcp add gospect gospect-mcp
 }
 ```
 
-Then ask your agent to scan a module. It calls the `scan` tool and reasons over the report —
-and, because the server is report-only, it can't change your code unless you tell it to.
+| Surface | How it connects | Notes |
+|---|---|---|
+| Claude Code | `claude mcp add gospect gospect-mcp` | one-liner |
+| Cursor / Windsurf / Cline | `mcpServers` JSON above | stdio |
+| VS Code (Continue, Copilot MCP) | `mcpServers` JSON above | stdio |
+| Zed / Codex CLI / Gemini CLI | client's MCP config | stdio |
+| Claude Desktop | `claude_desktop_config.json` | stdio |
+
+Then ask your agent to scan a module. It calls the `scan` tool and reasons over the report — and,
+because the server is report-only, it **can't** change your code unless you explicitly ask (via the
+separate `propose_fix` tool, which still only emits guidance).
+
+---
+
+## Performance
+
+gospect builds on the Go type-checker, so its runtime is bounded by `go build` — not by the tool.
+Warm-cache, single machine:
+
+| Scope | Packages | Time | Notes |
+|---|---|---|---|
+| Single small module | ~12 | ~1s | load ~0.9s / scan ~0.1s |
+| Mid-size module | 272 | ~2.5s | load ~2.1s / scan ~0.5s |
+| Full 9-module monorepo | 458 | ~30s | one command, every service |
+
+The **first** scan of a big repo is slower while Go compiles its dependencies once; subsequent scans
+are fast. Scope with a package pattern (`./somepkg/...`) for instant results, and use `-verbose` to
+watch progress on a long run.
 
 ---
 
@@ -379,7 +412,35 @@ The MCP layer is a hand-rolled JSON-RPC 2.0 stdio server (`initialize`, `tools/l
 
 ---
 
-## From source
+## Installation
+
+Pick whichever fits — all give you the same `gospect-mcp` binary.
+
+**One-line install (macOS / Linux)** — downloads the latest release binary for your platform:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.sh | bash
+```
+
+Override the target dir with `GOSPECT_INSTALL_DIR` or the version with `GOSPECT_VERSION`.
+
+**Windows (PowerShell)** — installs to `%LOCALAPPDATA%\gospect-mcp` and adds it to your PATH:
+
+```powershell
+irm https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.ps1 | iex
+```
+
+**With Go** (any platform with a Go toolchain):
+
+```sh
+go install github.com/backendArchitect/gospect-mcp@latest
+```
+
+**Prebuilt binaries** — Linux / macOS / Windows, amd64 & arm64 — from the
+[Releases page](https://github.com/backendArchitect/gospect-mcp/releases). Each is a
+`gospect-mcp_<tag>_<os>_<arch>.tar.gz` with a `.sha256` checksum.
+
+**From source:**
 
 ```sh
 git clone git@github.com:backendArchitect/gospect-mcp.git
