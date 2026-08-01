@@ -6,6 +6,9 @@
 [![CI](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml)
 [![Release](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml)
 
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/c302ec7c-ce66-4429-b276-50c473d4c15c" />
+
+
 **A Go-only, report-first code scanner exposed as an MCP server.** It indexes a Go module,
 runs deterministic analyzers, and **reports** genuine bugs, dead code, stale docs and outdated
 APIs. It **never modifies your code** — fixes are a separate, explicitly-invoked step.
