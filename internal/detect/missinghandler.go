@@ -16,11 +16,12 @@ func RunMissingHandlers(ctx context.Context, g graph.Graph) ([]Finding, error) {
 	findings := make([]Finding, 0, len(routes))
 	for _, r := range routes {
 		findings = append(findings, Finding{
-			Category: "missing",
-			Detector: "unhandled-route",
-			Severity: "medium",
-			Message:  "route " + r.Method + " " + r.Path + " has no handler",
-			Package:  r.QualifiedName,
+			Category:   "missing",
+			Detector:   "unhandled-route",
+			Severity:   "medium",
+			Confidence: "medium",
+			Message:    "route " + r.Method + " " + r.Path + " has no handler",
+			Package:    r.QualifiedName,
 		})
 	}
 	return findings, nil

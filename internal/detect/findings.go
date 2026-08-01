@@ -6,12 +6,16 @@ package detect
 type Finding struct {
 	Category string `json:"category"` // "bug", "over-engineered", "stale-doc", "missing", "modernize"
 	Detector string `json:"detector"` // analyzer that produced it, e.g. "nilness"
-	Severity string `json:"severity"` // "high" | "medium" | "low"
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Col      int    `json:"col"`
-	Message  string `json:"message"`
-	Package  string `json:"package"`
+	Severity string `json:"severity"` // "high" | "medium" | "low" — how bad if real
+
+	// Confidence is how sure we are the finding is real (independent of severity). SSA/type-checked
+	// analyzers are "high"; heuristic AST/marker checks are "medium" or "low". Useful for triage.
+	Confidence string `json:"confidence,omitempty"` // "high" | "medium" | "low"
+	File       string `json:"file"`
+	Line       int    `json:"line"`
+	Col        int    `json:"col"`
+	Message    string `json:"message"`
+	Package    string `json:"package"`
 	// Fingerprint is a stable identity for the finding (detector + relative path + message),
 	// deliberately independent of line number so it survives edits that shift lines. Used to match
 	// findings across runs (baseline mode) and to dedupe in SARIF. Set by the scan layer.

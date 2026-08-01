@@ -18,7 +18,7 @@ import (
 func RunVuln(roots []string) ([]Finding, error) {
 	if _, err := exec.LookPath("govulncheck"); err != nil {
 		return []Finding{{
-			Category: "vuln", Detector: "govulncheck", Severity: "low",
+			Category: "vuln", Detector: "govulncheck", Severity: "low", Confidence: "high",
 			Message: "govulncheck not found on PATH; install it (go install golang.org/x/vuln/cmd/govulncheck@latest) to enable vulnerability scanning",
 		}}, nil
 	}
@@ -79,7 +79,7 @@ func govulncheckModule(root string, seen map[string]bool) ([]Finding, error) {
 			continue
 		}
 		seen[key] = true
-		f := Finding{Category: "vuln", Detector: "govulncheck", Severity: "high", Package: t.Package}
+		f := Finding{Category: "vuln", Detector: "govulncheck", Severity: "high", Confidence: "high", Package: t.Package}
 		if t.Position != nil {
 			f.File, f.Line, f.Col = t.Position.Filename, t.Position.Line, t.Position.Column
 		}

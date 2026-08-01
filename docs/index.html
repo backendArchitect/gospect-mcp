@@ -287,7 +287,7 @@ gospect: 6 finding(s) in ./service (272 packages, 1 module)
         <tbody>
           <tr><td>Single small module</td><td class="num"><span class="pk">~12</span></td><td class="num">~1s</td><td class="muted">load 0.9s / scan 0.1s</td></tr>
           <tr><td>Mid-size module</td><td class="num"><span class="pk">272</span></td><td class="num">~2.5s</td><td class="muted">load 2.1s / scan 0.5s</td></tr>
-          <tr><td>Full 9-module monorepo</td><td class="num"><span class="pk">458</span></td><td class="num">~30s</td><td class="muted">one command, every service</td></tr>
+          <tr><td>Full 9-module monorepo</td><td class="num"><span class="pk">458</span></td><td class="num">~26s</td><td class="muted">modules load in parallel</td></tr>
         </tbody>
       </table>
     </div>
@@ -330,10 +330,12 @@ gospect: 6 finding(s) in ./service (272 packages, 1 module)
     <p class="eyebrow">In CI</p>
     <h2>Gate PRs. Annotate diffs. Adopt on messy repos.</h2>
     <div class="code"><button class="copy">Copy</button><pre>gospect-mcp check -fail-on high .                   # fail the build on any high-severity bug
+gospect-mcp check -since origin/main .              # diff mode: gate only the PR's changes (~1–2s)
 gospect-mcp scan -format sarif . &gt; gospect.sarif    # SARIF → inline PR annotations
 gospect-mcp check -baseline base.json .             # gate only on NEW findings</pre></div>
-    <p class="muted" style="margin-top:14px">A drop-in GitHub Action uploads SARIF so findings show up right on the pull
-      request. Baseline mode lets you turn gospect on for a repo that already has hundreds of findings.</p>
+    <p class="muted" style="margin-top:14px">Diff mode (<code>-since</code>) scans only the packages a PR touched, turning a
+      ~30s full scan into a ~1–2s check. A drop-in GitHub Action uploads SARIF so findings show up right on the
+      pull request, and baseline mode lets you turn gospect on for a repo that already has hundreds of findings.</p>
   </div>
 </section>
 

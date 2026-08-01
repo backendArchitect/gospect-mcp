@@ -21,13 +21,14 @@ func RunOverEngineering(ctx context.Context, g graph.Graph, scope string, minCyc
 			sev = "high"
 		}
 		findings = append(findings, Finding{
-			Category: "over-engineered",
-			Detector: "high-complexity",
-			Severity: sev,
-			File:     h.File,
-			Line:     h.Line,
-			Message:  fmt.Sprintf("%s has high complexity (cyclomatic=%d, cognitive=%d) — consider splitting", h.Name, h.Cyclomatic, h.Cognitive),
-			Package:  h.QualifiedName,
+			Category:   "over-engineered",
+			Detector:   "high-complexity",
+			Severity:   sev,
+			Confidence: "medium",
+			File:       h.File,
+			Line:       h.Line,
+			Message:    fmt.Sprintf("%s has high complexity (cyclomatic=%d, cognitive=%d) — consider splitting", h.Name, h.Cyclomatic, h.Cognitive),
+			Package:    h.QualifiedName,
 		})
 	}
 	return findings, nil

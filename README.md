@@ -1,7 +1,7 @@
 # gospect-mcp
 
 ![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8?logo=go&logoColor=white)
-![License](https://img.shields.io/badge/License-GPL--3.0-green)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 ![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)
 [![CI](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml)
 [![Release](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml)
@@ -132,6 +132,37 @@ gospect-mcp check -baseline gospect-baseline.json -fail-on medium .   # CI fails
 Matching is by a line-independent fingerprint (detector + path + message), so a pre-existing finding
 that merely shifts lines stays baselined.
 
+### Deeper analysis: staticcheck
+
+By default gospect runs a fast, high-precision analyzer set. Add `-staticcheck` to also run the
+[staticcheck](https://staticcheck.dev) `SA` analyzers — the canonical Go bug checks (`SA1019`
+deprecated-API usage, dead assignments, impossible conditions, and ~100 more):
+
+```sh
+gospect-mcp scan -staticcheck .                       # much deeper bug detection
+gospect-mcp check -staticcheck -since origin/main .   # deep, but only on the PR's changes (fast)
+```
+
+It's opt-in because it's **thorough but slow** — roughly an order of magnitude slower than the
+default set on a large module. Pairing it with `-since` (diff mode) keeps PR checks fast while still
+getting staticcheck depth on the changed code. Findings land under the `bug` category (and
+`modernize` for deprecated-API `SA1019`), so existing severity gates and filters apply.
+
+### Fast PR checks: diff mode
+
+On a pull request you don't need to rescan the whole repo — only what changed. `-since <git-ref>`
+loads and scans just the packages containing `.go` files changed since that ref:
+
+```sh
+gospect-mcp scan  -since origin/main .              # scan only changed packages
+gospect-mcp check -since origin/main -fail-on high . # gate a PR on its own changes
+```
+
+On a large monorepo this turns a ~30s full scan into a **~1–2s** PR check (it loads only the
+touched module, not every service). Use `origin/main...` (three dots) for merge-base semantics on a
+branch. Outside a git repo, or without `-since`, it does a normal full scan. Diff mode skips the
+whole-repo graph detectors, since a PR check should only surface findings in the code it touched.
+
 ### GitHub code scanning (SARIF) & vulnerabilities
 
 ```sh
@@ -228,42 +259,56 @@ Warm-cache, single machine:
 |---|---|---|---|
 | Single small module | ~12 | ~1s | load ~0.9s / scan ~0.1s |
 | Mid-size module | 272 | ~2.5s | load ~2.1s / scan ~0.5s |
-| Full 9-module monorepo | 458 | ~30s | one command, every service |
+| Full 9-module monorepo | 458 | ~26s | modules load in parallel |
 
 The **first** scan of a big repo is slower while Go compiles its dependencies once; subsequent scans
-are fast. Scope with a package pattern (`./somepkg/...`) for instant results, and use `-verbose` to
-watch progress on a long run.
+are fast. Monorepo modules load concurrently. Scope with a package pattern (`./somepkg/...`) for
+instant results, and use `-verbose` to watch progress on a long run.
 
 ---
 
 ## What it detects
 
-All detectors are deterministic and report-only. Findings carry `category`, `detector`,
-`severity`, `file:line`, and `message`; the report includes a `by_category` summary.
+All detectors are deterministic and report-only. Findings carry `category`, `detector`, `severity`,
+a `confidence` (how sure it's real — SSA/type-checked checks are `high`, heuristic markers `medium`/
+`low`), `file:line`, and `message`; the report includes `by_category` and `by_severity` summaries.
+Filter noisy heuristics with `-min-confidence high`.
 
 | Category | Detectors |
 |---|---|
-| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable` |
+| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
 | **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers, unchecked error returns (errcheck-lite) |
 | **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
+| **over-engineered** | `high-complexity` — functions whose cyclomatic **or** cognitive complexity exceeds conservative thresholds (built-in, no external graph) |
 
-Built entirely on `golang.org/x/tools` — no heavyweight dependencies.
-
-**Planned** (see the design notes): over-engineering, stale swagger/OpenAPI vs. routes,
-untested exported code, routes-with-no-handler, deprecated-API detection, and a `propose_fix`
-tool that emits a *fix envelope* (still never applies code) — all via optional composition with
-a code graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp).
+The default set is built entirely on `golang.org/x/tools`. Opt into the deeper
+[staticcheck](https://staticcheck.dev) `SA` analyzers with `-staticcheck`, and exported-but-untested
+functions with `-untested` (both below).
 
 ---
 
-## Optional: compose with a code graph
+## Whole-repo detectors (built-in) & the code graph
 
-Some detectors need whole-repo relationships (call graph, routes, test coverage) that
-single-package analysis can't see. `gospect-mcp` gets these by acting as an MCP **client** of a
-code-intelligence graph such as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
-— no graph of its own, no duplicated index.
+Some detectors need whole-repo relationships single-package analysis can't see. gospect builds a
+**built-in graph** from the loaded packages for the two that don't need a full call graph:
 
-Enable it with three env vars (all optional; unset = graph disabled, local detectors still run):
+- **over-engineered / high-complexity** — runs by default; cyclomatic **or** cognitive complexity
+  over conservative thresholds. No configuration.
+- **untested-exports** — opt-in with `-untested` (exported functions with no test in the same
+  package). The built-in check is name-based and noisy on large repos, so it's off by default.
+- **stale-doc / swagger-drift** — runs automatically **when an OpenAPI/Swagger spec is present and
+  routes are found in the code**. gospect extracts registered routes from the AST (net/http
+  `Handle`/`HandleFunc`, and chi/gin/echo verb methods like `r.GET("/x", …)`) and flags documented
+  endpoints with no matching route. If no routes are detected it stays silent (no false positives).
+
+The remaining route detector, **unhandled-route** (a route declared with no handler), needs a real
+call/route graph. gospect gets that by acting as an MCP **client** of a code-intelligence graph such
+as [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) — no graph of its own, no
+duplicated index. An external graph also makes untested-exports and swagger-drift more accurate
+(real TESTS/HANDLES edges instead of heuristics).
+
+Enable it with three env vars (all optional; unset = external graph disabled, built-in detectors
+still run):
 
 ```sh
 export GOSPECT_GRAPH_CMD="codebase-memory-mcp"   # command to launch the graph MCP server
@@ -272,10 +317,7 @@ export GOSPECT_GRAPH_SCOPE="internal/"            # optional file-path substring
 gospect-mcp scan /path/to/module
 ```
 
-When configured, the report gains graph-backed findings:
-- **untested-exports** — exported functions with no incoming test.
-- **over-engineered / high-complexity** — functions/methods whose cyclomatic **or** cognitive
-  complexity exceeds conservative thresholds.
+When configured, the report additionally gains the route-based findings:
 - **unhandled-route** — HTTP routes registered with no handler.
 - **stale-doc / swagger-drift** — endpoints documented in an OpenAPI/Swagger spec (JSON or YAML)
   with no matching registered route (heuristic path matching; report-first).

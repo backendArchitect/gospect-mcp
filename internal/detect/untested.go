@@ -17,13 +17,14 @@ func RunUntestedExports(ctx context.Context, g graph.Graph, scope string) ([]Fin
 	findings := make([]Finding, 0, len(syms))
 	for _, s := range syms {
 		findings = append(findings, Finding{
-			Category: "missing",
-			Detector: "untested-export",
-			Severity: "low",
-			File:     s.File,
-			Line:     s.Line,
-			Message:  "exported function " + s.Name + " has no test",
-			Package:  s.QualifiedName,
+			Category:   "missing",
+			Detector:   "untested-export",
+			Severity:   "low",
+			Confidence: "medium",
+			File:       s.File,
+			Line:       s.Line,
+			Message:    "exported function " + s.Name + " has no test",
+			Package:    s.QualifiedName,
 		})
 	}
 	return findings, nil

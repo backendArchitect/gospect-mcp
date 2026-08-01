@@ -37,6 +37,19 @@ func TestApply_MinSeverity(t *testing.T) {
 	}
 }
 
+func TestApply_MinConfidence(t *testing.T) {
+	r := &Report{Findings: []detect.Finding{
+		{Detector: "nilness", Severity: "high", Confidence: "high", File: "a.go"},
+		{Detector: "unchecked-error", Severity: "medium", Confidence: "medium", File: "b.go"},
+		{Detector: "ineffassign", Severity: "low", Confidence: "low", File: "c.go"},
+	}}
+	r.recount()
+	removed := r.Apply(FilterOptions{MinConfidence: "high"})
+	if removed != 2 || r.FindingCount != 1 || r.Findings[0].Detector != "nilness" {
+		t.Fatalf("min-confidence=high: removed=%d kept=%d; want 2 removed, only nilness", removed, r.FindingCount)
+	}
+}
+
 func TestApply_CategoryAndDetector(t *testing.T) {
 	r := sampleReport()
 	r.Apply(FilterOptions{Categories: []string{"bug"}})
