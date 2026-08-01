@@ -132,9 +132,8 @@ func runScan() {
 	untested := fs.Bool("untested", false, "also report exported functions with no test (noisy on large repos)")
 	since := fs.String("since", "", "diff mode: scan only packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
-	mustParse(fs)
+	args := parseArgs(fs)
 
-	args := fs.Args()
 	if len(args) == 0 {
 		// A bare `scan` must NOT fall through to MCP server mode (which blocks on stdin and looks
 		// like a hang). Require a directory.
@@ -247,20 +246,31 @@ func printFindingsText(rep *scan.Report) {
 	}
 }
 
-// mustParse parses a subcommand's flags (os.Args[2:]) with a friendlier failure than the flag
-// package's default. On an unknown flag it appends a version + "run update" hint — the common cause
-// is an out-of-date binary that predates the flag (flag already printed the specific error/usage).
-func mustParse(fs *flag.FlagSet) {
-	err := fs.Parse(os.Args[2:])
-	if err == nil {
-		return
+// parseArgs parses a subcommand's flags from os.Args[2:] and returns the positional args. Unlike a
+// single flag.Parse, it allows flags to appear ANYWHERE — before, after, or between positionals
+// (e.g. `scan ./dir -format text`), which the flag package otherwise refuses (it stops at the first
+// non-flag). On an unknown flag it appends a version + "run update" hint (the usual cause is a stale
+// binary predating the flag).
+func parseArgs(fs *flag.FlagSet) []string {
+	var positional []string
+	args := os.Args[2:]
+	for {
+		if err := fs.Parse(args); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				os.Exit(0) // -h/--help: flag printed usage already
+			}
+			fmt.Fprintf(os.Stderr, "\nhint: this gospect-mcp is %s — if that flag is newer than your binary, run `gospect-mcp update`.\n",
+				selfupdate.Current())
+			os.Exit(2)
+		}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positional = append(positional, rest[0]) // consume one non-flag, then keep parsing the tail
+		args = rest[1:]
 	}
-	if errors.Is(err, flag.ErrHelp) {
-		os.Exit(0) // -h/--help: flag printed usage already
-	}
-	fmt.Fprintf(os.Stderr, "\nhint: this gospect-mcp is %s — if that flag is newer than your binary, run `gospect-mcp update`.\n",
-		selfupdate.Current())
-	os.Exit(2)
+	return positional
 }
 
 // diffOptions turns a -since git ref into diff-mode scan options: the .go files changed since the
@@ -447,7 +457,7 @@ func envelopeJSON(raw []byte) (string, error) {
 }
 
 // runCheck is the CI-gate mode: scan, then exit non-zero if any finding is at/above the
-// configured severity. Flags must precede the positional args: `check [flags] <dir> [patterns...]`.
+// configured severity. Flags may appear anywhere: `check [flags] <dir> [patterns...]` or after.
 func runCheck() {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	failOn := fs.String("fail-on", "high", "minimum severity that fails the check: high|medium|low")
@@ -462,9 +472,8 @@ func runCheck() {
 	untested := fs.Bool("untested", false, "also report exported functions with no test (noisy on large repos)")
 	since := fs.String("since", "", "diff mode: gate only on packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
-	mustParse(fs)
+	args := parseArgs(fs)
 
-	args := fs.Args()
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: gospect-mcp check [flags] <dir> [patterns...]")
 		os.Exit(2)

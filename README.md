@@ -385,7 +385,7 @@ gospect-mcp check -fail-on medium -ignore todo,go-version ./...
 gospect-mcp check -format json .           # machine-readable
 ```
 
-Flags go **before** the path: `check [flags] <dir> [patterns...]`. Exit codes: `0` clean,
+Flags may appear anywhere (before, after, or between the path/patterns). Exit codes: `0` clean,
 `1` blocking findings, `2` error.
 
 Drop-in GitHub Action:
