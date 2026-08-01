@@ -85,7 +85,8 @@ Usage:
   gospect-mcp help                               show this help
 
 Flags (scan, check):
-  -verbose            stream per-module load + detector progress, and a summary, to stderr
+  -quiet              silence progress on stderr (progress is on by default; JSON on stdout is unaffected)
+  -verbose            stream per-module load + detector progress and a summary to stderr (default on)
   -min-severity <s>   keep only findings at/above a severity: low|medium|high
   -min-confidence <s> keep only findings at/above a confidence: low|medium|high (triage)
   -category <a,b>     keep only these categories (e.g. bug,missing)
@@ -120,7 +121,8 @@ Docs: https://github.com/backendArchitect/gospect-mcp
 // the positional args: `scan [flags] <dir> [patterns...]`.
 func runScan() {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
-	verbose := fs.Bool("verbose", false, "stream load/detector progress and a summary to stderr")
+	verbose := fs.Bool("verbose", true, "stream load/detector progress and a summary to stderr (on by default)")
+	quiet := fs.Bool("quiet", false, "silence all progress on stderr (JSON on stdout is unaffected)")
 	format := fs.String("format", "json", "output format: json|text|sarif")
 	baseline := fs.String("baseline", "", "path to a saved report; show only findings NOT already in it")
 	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
@@ -145,12 +147,13 @@ func runScan() {
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
 
+	show := *verbose && !*quiet // progress is on by default; -quiet (or -verbose=false) silences it
 	diffMode, changed := diffOptions(args[0], *since)
-	if !diffMode {
+	if !diffMode && show {
 		fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies; large modules take a few seconds)\n", args[0])
 	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
-		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(show),
 		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, Untested: *untested,
 		DiffMode: diffMode, ChangedFiles: changed,
 	})
@@ -158,11 +161,11 @@ func runScan() {
 		exitScanError(err)
 	}
 	warnSkipped(rep)
-	if removed := rep.Apply(filter()); removed > 0 {
+	if removed := rep.Apply(filter()); removed > 0 && show {
 		fmt.Fprintf(os.Stderr, "gospect: %d finding(s) filtered out by flags\n", removed)
 	}
 	applyBaseline(rep, *baseline)
-	if *verbose {
+	if show {
 		printScanSummary(rep)
 	}
 	switch *format {
@@ -450,7 +453,8 @@ func runCheck() {
 	failOn := fs.String("fail-on", "high", "minimum severity that fails the check: high|medium|low")
 	format := fs.String("format", "text", "output format: text|json")
 	ignore := fs.String("ignore", "", "comma-separated detector names to ignore")
-	verbose := fs.Bool("verbose", false, "stream load/detector progress to stderr")
+	verbose := fs.Bool("verbose", true, "stream load/detector progress to stderr (on by default)")
+	quiet := fs.Bool("quiet", false, "silence all progress on stderr")
 	baseline := fs.String("baseline", "", "path to a saved report; gate only on findings NOT already in it")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
@@ -470,12 +474,13 @@ func runCheck() {
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
 
+	show := *verbose && !*quiet
 	diffMode, changed := diffOptions(args[0], *since)
-	if !diffMode {
+	if !diffMode && show {
 		fmt.Fprintf(os.Stderr, "gospect: loading %s … (first run may compile dependencies)\n", args[0])
 	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
-		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(*verbose),
+		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(show),
 		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, Untested: *untested,
 		DiffMode: diffMode, ChangedFiles: changed,
 	})

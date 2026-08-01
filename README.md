@@ -39,11 +39,12 @@ gospect-mcp scan /path/to/your/module ./...
 You'll get a JSON report of findings, **ordered by importance — bugs first**, then medium, then low.
 That's it — no config, no services, no code changes. Run `gospect-mcp help` for every command and flag.
 
-Add `-verbose` to watch a long scan work (per-module load progress + a summary, all on stderr; the
-JSON on stdout is unchanged):
+Progress (per-module load + a summary) streams to **stderr by default**, so a long scan never looks
+hung — and the JSON on **stdout** stays clean for piping. Silence it with `-quiet`:
 
 ```sh
-gospect-mcp scan -verbose /path/to/monorepo
+gospect-mcp scan /path/to/monorepo            # progress on stderr, JSON on stdout
+gospect-mcp scan -quiet /path/to/monorepo > report.json   # stderr silent
 ```
 
 ### Cutting the noise (filters + text output)
