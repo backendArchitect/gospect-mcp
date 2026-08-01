@@ -545,6 +545,13 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
 
 ---
 
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build,
+test, and get a change merged, and please read the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+---
+
 ## License
 
 [MIT License](LICENSE).
