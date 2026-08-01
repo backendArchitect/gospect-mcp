@@ -37,7 +37,7 @@ func scanFileForMissing(p *packages.Package, file *ast.File) []Finding {
 			if marker := commentMarker(c.Text); marker != "" {
 				pos := at(c)
 				out = append(out, Finding{
-					Category: "missing", Detector: "todo", Severity: "low",
+					Category: "missing", Detector: "todo", Severity: "low", Confidence: "high",
 					File: pos.Filename, Line: pos.Line, Col: pos.Column,
 					Message: strings.TrimSpace(strings.TrimLeft(c.Text, "/* \t")),
 					Package: p.PkgPath,
@@ -55,7 +55,7 @@ func scanFileForMissing(p *packages.Package, file *ast.File) []Finding {
 					if s := strings.ToLower(lit.Value); isStubMessage(s) {
 						pos := at(node)
 						out = append(out, Finding{
-							Category: "missing", Detector: "stub", Severity: "medium",
+							Category: "missing", Detector: "stub", Severity: "medium", Confidence: "high",
 							File: pos.Filename, Line: pos.Line, Col: pos.Column,
 							Message: "unimplemented stub: panic(" + lit.Value + ")",
 							Package: p.PkgPath,
@@ -69,7 +69,7 @@ func scanFileForMissing(p *packages.Package, file *ast.File) []Finding {
 			if ok && resultIsError(p, call) && !isBenignErrorCall(p, call) {
 				pos := at(call)
 				out = append(out, Finding{
-					Category: "missing", Detector: "unchecked-error", Severity: "medium",
+					Category: "missing", Detector: "unchecked-error", Severity: "medium", Confidence: "medium",
 					File: pos.Filename, Line: pos.Line, Col: pos.Column,
 					Message: "error return value is not checked",
 					Package: p.PkgPath,

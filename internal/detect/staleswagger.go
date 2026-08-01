@@ -46,11 +46,12 @@ func RunStaleSwagger(ctx context.Context, g graph.Graph, dir string) ([]Finding,
 				continue
 			}
 			findings = append(findings, Finding{
-				Category: "stale-doc",
-				Detector: "swagger-drift",
-				Severity: "medium",
-				File:     sf,
-				Message:  "documented endpoint " + ep.Method + " " + ep.Path + " has no matching route (stale doc?)",
+				Category:   "stale-doc",
+				Detector:   "swagger-drift",
+				Severity:   "medium",
+				Confidence: "medium",
+				File:       sf,
+				Message:    "documented endpoint " + ep.Method + " " + ep.Path + " has no matching route (stale doc?)",
 			})
 		}
 	}

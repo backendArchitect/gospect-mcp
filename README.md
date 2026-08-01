@@ -269,12 +269,14 @@ instant results, and use `-verbose` to watch progress on a long run.
 
 ## What it detects
 
-All detectors are deterministic and report-only. Findings carry `category`, `detector`,
-`severity`, `file:line`, and `message`; the report includes a `by_category` summary.
+All detectors are deterministic and report-only. Findings carry `category`, `detector`, `severity`,
+a `confidence` (how sure it's real — SSA/type-checked checks are `high`, heuristic markers `medium`/
+`low`), `file:line`, and `message`; the report includes `by_category` and `by_severity` summaries.
+Filter noisy heuristics with `-min-confidence high`.
 
 | Category | Detectors |
 |---|---|
-| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable` |
+| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
 | **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers, unchecked error returns (errcheck-lite) |
 | **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
 

@@ -87,6 +87,7 @@ Usage:
 Flags (scan, check):
   -verbose            stream per-module load + detector progress, and a summary, to stderr
   -min-severity <s>   keep only findings at/above a severity: low|medium|high
+  -min-confidence <s> keep only findings at/above a confidence: low|medium|high (triage)
   -category <a,b>     keep only these categories (e.g. bug,missing)
   -detector <a,b>     keep only these detectors (e.g. nilness)
   -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
@@ -195,15 +196,17 @@ func applyBaseline(rep *scan.Report, path string) {
 // the FilterOptions after parsing. Used by both scan and check.
 func addFilterFlags(fs *flag.FlagSet) func() scan.FilterOptions {
 	minSev := fs.String("min-severity", "", "keep only findings at/above this severity: low|medium|high")
+	minConf := fs.String("min-confidence", "", "keep only findings at/above this confidence: low|medium|high")
 	cats := fs.String("category", "", "keep only these comma-separated categories (e.g. bug,missing)")
 	dets := fs.String("detector", "", "keep only these comma-separated detectors (e.g. nilness)")
 	exclude := fs.String("exclude", "", "drop findings whose file path matches any comma-separated glob/substring (e.g. *.pb.go,/mocks/)")
 	return func() scan.FilterOptions {
 		return scan.FilterOptions{
-			MinSeverity: strings.TrimSpace(*minSev),
-			Categories:  splitCSV(*cats),
-			Detectors:   splitCSV(*dets),
-			ExcludeGlob: splitCSV(*exclude),
+			MinSeverity:   strings.TrimSpace(*minSev),
+			MinConfidence: strings.TrimSpace(*minConf),
+			Categories:    splitCSV(*cats),
+			Detectors:     splitCSV(*dets),
+			ExcludeGlob:   splitCSV(*exclude),
 		}
 	}
 }

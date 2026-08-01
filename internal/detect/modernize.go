@@ -38,11 +38,12 @@ func RunModernize(dir string) ([]Finding, error) {
 		line = f.Go.Syntax.Start.Line
 	}
 	return []Finding{{
-		Category: "modernize",
-		Detector: "go-version",
-		Severity: "low",
-		File:     gomodPath,
-		Line:     line,
+		Category:   "modernize",
+		Detector:   "go-version",
+		Severity:   "low",
+		Confidence: "high",
+		File:       gomodPath,
+		Line:       line,
 		Message: fmt.Sprintf("go.mod declares Go %s (older than recommended 1.%d); consider updating the go directive and adopting newer language features",
 			f.Go.Version, recommendedGoMinor),
 	}}, nil

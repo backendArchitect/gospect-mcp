@@ -13,25 +13,32 @@ import (
 	"golang.org/x/tools/go/analysis/passes/unmarshal"
 	"golang.org/x/tools/go/analysis/passes/unreachable"
 	"golang.org/x/tools/go/packages"
+
+	"github.com/gordonklaus/ineffassign/pkg/ineffassign"
+	"github.com/timakin/bodyclose/passes/bodyclose"
 )
 
 type analyzerMeta struct {
-	category string
-	severity string
+	category   string
+	severity   string
+	confidence string
 }
 
 // bugAnalyzers is the curated, high-precision analyzer set (bug-only, not style). Each entry
-// carries the category/severity we report it under. All ship in golang.org/x/tools — no extra deps.
+// carries the category/severity/confidence we report it under. Type/SSA-backed checks are high
+// confidence; the two more heuristic ones (nilfunc, unreachable) are medium.
 var bugAnalyzers = map[*analysis.Analyzer]analyzerMeta{
-	nilness.Analyzer:      {"bug", "high"},         // SSA nil dereference
-	lostcancel.Analyzer:   {"bug", "high"},         // context CancelFunc never called -> leak
-	httpresponse.Analyzer: {"bug", "high"},         // using resp before checking err / not closing body
-	unmarshal.Analyzer:    {"bug", "high"},         // non-pointer passed to Unmarshal
-	copylock.Analyzer:     {"bug", "high"},         // a value containing a lock is copied
-	errorsas.Analyzer:     {"bug", "high"},         // errors.As target is not a pointer to an error
-	nilfunc.Analyzer:      {"bug", "medium"},       // useless comparison of func value to nil
-	unreachable.Analyzer:  {"bug", "medium"},       // unreachable code
-	loopclosure.Analyzer:  {"modernize", "medium"}, // pre-1.22 loop-var capture (no-op on go>=1.22)
+	nilness.Analyzer:      {"bug", "high", "high"},         // SSA nil dereference
+	lostcancel.Analyzer:   {"bug", "high", "high"},         // context CancelFunc never called -> leak
+	httpresponse.Analyzer: {"bug", "high", "high"},         // using resp before checking err / not closing body
+	unmarshal.Analyzer:    {"bug", "high", "high"},         // non-pointer passed to Unmarshal
+	copylock.Analyzer:     {"bug", "high", "high"},         // a value containing a lock is copied
+	errorsas.Analyzer:     {"bug", "high", "high"},         // errors.As target is not a pointer to an error
+	bodyclose.Analyzer:    {"bug", "high", "high"},         // HTTP response body never closed -> leak
+	nilfunc.Analyzer:      {"bug", "medium", "high"},       // useless comparison of func value to nil
+	unreachable.Analyzer:  {"bug", "medium", "high"},       // unreachable code
+	ineffassign.Analyzer:  {"bug", "low", "medium"},        // value assigned but never used
+	loopclosure.Analyzer:  {"modernize", "medium", "high"}, // pre-1.22 loop-var capture (no-op on go>=1.22)
 }
 
 // RunBugDetectors runs the analyzer set over already-loaded packages and maps each diagnostic
@@ -57,14 +64,15 @@ func RunBugDetectors(pkgs []*packages.Package) ([]Finding, error) {
 		for _, d := range act.Diagnostics {
 			pos := act.Package.Fset.Position(d.Pos)
 			findings = append(findings, Finding{
-				Category: meta.category,
-				Detector: act.Analyzer.Name,
-				Severity: meta.severity,
-				File:     pos.Filename,
-				Line:     pos.Line,
-				Col:      pos.Column,
-				Message:  d.Message,
-				Package:  act.Package.PkgPath,
+				Category:   meta.category,
+				Detector:   act.Analyzer.Name,
+				Severity:   meta.severity,
+				Confidence: meta.confidence,
+				File:       pos.Filename,
+				Line:       pos.Line,
+				Col:        pos.Column,
+				Message:    d.Message,
+				Package:    act.Package.PkgPath,
 			})
 		}
 	}

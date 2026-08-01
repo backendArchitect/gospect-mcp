@@ -18,7 +18,8 @@ func staticcheckSet() (map[*analysis.Analyzer]analyzerMeta, []*analysis.Analyzer
 		if la.Doc != nil && la.Doc.NonDefault {
 			continue // off by default in staticcheck itself
 		}
-		metas[la.Analyzer] = analyzerMeta{category: scCategory(la), severity: scSeverity(la)}
+		// staticcheck's SA set is curated and type/SSA-backed — treat as high confidence.
+		metas[la.Analyzer] = analyzerMeta{category: scCategory(la), severity: scSeverity(la), confidence: "high"}
 		list = append(list, la.Analyzer)
 	}
 	return metas, list
@@ -70,14 +71,15 @@ func RunStaticcheck(pkgs []*packages.Package) ([]Finding, error) {
 		for _, d := range act.Diagnostics {
 			pos := act.Package.Fset.Position(d.Pos)
 			findings = append(findings, Finding{
-				Category: meta.category,
-				Detector: act.Analyzer.Name, // e.g. "SA1019", "SA4006"
-				Severity: meta.severity,
-				File:     pos.Filename,
-				Line:     pos.Line,
-				Col:      pos.Column,
-				Message:  d.Message,
-				Package:  act.Package.PkgPath,
+				Category:   meta.category,
+				Detector:   act.Analyzer.Name, // e.g. "SA1019", "SA4006"
+				Severity:   meta.severity,
+				Confidence: meta.confidence,
+				File:       pos.Filename,
+				Line:       pos.Line,
+				Col:        pos.Column,
+				Message:    d.Message,
+				Package:    act.Package.PkgPath,
 			})
 		}
 	}
