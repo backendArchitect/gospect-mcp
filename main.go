@@ -5,7 +5,9 @@
 //	gospect-mcp                 # MCP server over stdio (default)
 //	gospect-mcp scan <dir> ...  # standalone CLI: print a JSON report
 //
-// It never modifies code. Fixes are a separate, explicitly-invoked step (not yet implemented).
+// It never modifies code by default. Fixing is a separate, explicitly-invoked step: the `fix` CLI
+// command, or — only when the server is started with --allow-fix (or GOSPECT_ALLOW_FIX=1) — a
+// guarded, deterministic, self-verifying `fix` MCP tool.
 //
 // Optional graph composition — set these to enable graph-backed detectors (e.g. untested-exports)
 // by spawning a codebase-memory-mcp-compatible server:
@@ -47,10 +49,12 @@ func main() {
 	// No arguments = MCP server over stdio (how MCP hosts launch it). Every other invocation is a
 	// subcommand; an unrecognized one errors with usage rather than silently starting the server.
 	if len(os.Args) < 2 {
-		runServer()
+		runServer(allowFixEnabled(false))
 		return
 	}
 	switch os.Args[1] {
+	case "--allow-fix", "-allow-fix":
+		runServer(true)
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 	case "version", "--version":
@@ -79,7 +83,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `gospect-mcp — report-first, Go-only code scanner (MCP server + CLI)
 
 Usage:
-  gospect-mcp                                    start the MCP server (stdio; default)
+  gospect-mcp                                    start the MCP server (stdio; default, report-only)
+  gospect-mcp --allow-fix                        start the server WITH the guarded deterministic fix tool
   gospect-mcp scan  [flags] <dir> [patterns...]  scan a module or monorepo, print a JSON report
   gospect-mcp check [flags] <dir> [patterns...]  CI gate: exit non-zero on findings at/above a severity
   gospect-mcp fix   [flags] <dir> [patterns...]  drive a system AI agent to fix ONE finding, then verify it
@@ -489,8 +494,16 @@ func printScanSummary(rep *scan.Report) {
 	}
 }
 
-// runServer starts the MCP stdio server.
-func runServer() {
+// allowFixEnabled reports whether the guarded `fix` MCP tool should be exposed. It's off unless the
+// operator opts in — via the --allow-fix flag (passed as flag) or GOSPECT_ALLOW_FIX=1 (convenient
+// for MCP host configs that set env more easily than args).
+func allowFixEnabled(flag bool) bool {
+	return flag || os.Getenv("GOSPECT_ALLOW_FIX") == "1"
+}
+
+// runServer starts the MCP stdio server. The server is report-only; it exposes a code-mutating
+// `fix` tool only when allowFix is true.
+func runServer(allowFix bool) {
 	ctx := context.Background()
 	g, cleanup, scope := buildGraph(ctx)
 	defer cleanup()
@@ -561,10 +574,68 @@ func runServer() {
 		},
 	})
 
+	// Guarded actuator. Off by default so the server stays a pure sensor; enabled only via
+	// --allow-fix / GOSPECT_ALLOW_FIX=1. Deterministic-only (no AI — the server has no model) and
+	// self-verifying: it keeps a change only if the finding is gone, no new findings appeared, and
+	// the module still builds; otherwise it rolls the working tree back. Requires a clean git tree.
+	if allowFix {
+		fmt.Fprintln(os.Stderr, "gospect: fix tool ENABLED (deterministic, verified, git-checkpointed)")
+		srv.Register(mcp.Tool{
+			Name: "fix",
+			Description: "Apply a DETERMINISTIC, verified fix for ONE finding and keep it only if it verifies " +
+				"(finding gone, no new findings, module still builds); otherwise the working tree is rolled back. " +
+				"No AI is used; only findings with exactly one unambiguous analyzer fix are fixable — others return " +
+				"applied=false. Requires a clean git tree. Disabled unless the server was started with --allow-fix.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":     map[string]any{"type": "string", "description": "module directory (used to resolve a relative file)"},
+					"detector": map[string]any{"type": "string", "description": "the finding's detector, e.g. SA1006"},
+					"file":     map[string]any{"type": "string", "description": "the finding's file (absolute, or relative to path)"},
+					"line":     map[string]any{"type": "integer"},
+					"test":     map[string]any{"type": "boolean", "description": "also run `go test ./...` when verifying"},
+				},
+				"required": []string{"detector", "file"},
+			},
+			Handler: func(args json.RawMessage) (string, error) {
+				return fixToolJSON(ctx, args)
+			},
+		})
+	}
+
 	if err := srv.Serve(os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "server error:", err)
 		os.Exit(1)
 	}
+}
+
+// fixToolJSON runs one deterministic, verified fix for the MCP `fix` tool and returns the Result as
+// JSON. Relative finding files are resolved against path. Never drives an AI agent.
+func fixToolJSON(ctx context.Context, raw []byte) (string, error) {
+	var f detect.Finding
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return "", fmt.Errorf("invalid finding: %w", err)
+	}
+	var extra struct {
+		Path string `json:"path"`
+		Test bool   `json:"test"`
+	}
+	_ = json.Unmarshal(raw, &extra)
+	if f.Detector == "" || f.File == "" {
+		return "", fmt.Errorf("detector and file are required")
+	}
+	if !filepath.IsAbs(f.File) && extra.Path != "" {
+		f.File = filepath.Join(extra.Path, f.File)
+	}
+	r, err := fixer.Fix(ctx, extra.Path, fixer.Options{Finding: f, Deterministic: true, RunTests: extra.Test})
+	if err != nil {
+		return "", err
+	}
+	out, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // warnSkipped tells the user (on stderr) which monorepo modules couldn't be loaded, so a partial

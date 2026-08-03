@@ -473,8 +473,29 @@ restored exactly:
 
 Exit codes: `0` fixed, `1` not applied (rolled back), `2` error (e.g. dirty tree, no agent found).
 
-> `fix` is a CLI-only, explicitly-invoked actuator. The MCP server stays **report-only** — it never
-> edits your code.
+## The guarded `fix` MCP tool (opt-in)
+
+By default the MCP server is a pure **sensor** — it exposes only `scan` and `propose_fix` and never
+edits code. If you want an MCP host to request a *verified* fix, start the server with `--allow-fix`
+(or `GOSPECT_ALLOW_FIX=1`, handy for host config `env`):
+
+```jsonc
+// e.g. an MCP host config
+{ "command": "gospect-mcp", "args": ["--allow-fix"] }
+```
+
+That registers one extra tool, `fix`, which is deliberately conservative:
+
+- **Deterministic only** — it applies the analyzer's mechanical fix (the `-safe` path). The server
+  has **no AI model**; it never drives an agent. Findings without exactly one unambiguous fix come
+  back `applied: false`.
+- **Self-verifying** — same safety contract as the CLI: clean git tree required, re-scan (target
+  gone + no new findings), `go build` must pass (`test: true` also runs `go test`), else the working
+  tree is rolled back.
+- **Off unless you ask** — no flag, no tool. The default server can't touch your code.
+
+Call it with the finding fields from `scan` (`detector`, `file`, optional `line`) plus the module
+`path`; it returns the same `Result` JSON the CLI produces (with the diff on success).
 
 ## How it works
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +41,35 @@ func TestParseArgs_Interspersed(t *testing.T) {
 				t.Errorf("positional=%v; want %v", got, c.wantPosArg)
 			}
 		})
+	}
+}
+
+func TestAllowFixEnabled(t *testing.T) {
+	t.Setenv("GOSPECT_ALLOW_FIX", "")
+	if allowFixEnabled(false) {
+		t.Fatal("should be off with no flag and no env")
+	}
+	if !allowFixEnabled(true) {
+		t.Fatal("flag should enable it")
+	}
+	t.Setenv("GOSPECT_ALLOW_FIX", "1")
+	if !allowFixEnabled(false) {
+		t.Fatal("env should enable it")
+	}
+}
+
+// fixToolJSON must reject a call that doesn't identify a finding, before touching git or the module.
+func TestFixToolJSON_RequiresDetectorAndFile(t *testing.T) {
+	for _, in := range []string{`{}`, `{"detector":"SA1006"}`, `{"file":"app.go"}`} {
+		if _, err := fixToolJSON(context.Background(), []byte(in)); err == nil {
+			t.Fatalf("expected an error for %s", in)
+		}
+	}
+	if _, err := fixToolJSON(context.Background(), []byte(`{bad json`)); err == nil {
+		t.Fatal("expected an error for malformed JSON")
+	}
+	// A well-formed request with no go.mod above the file fails inside the fixer, not on validation.
+	if _, err := fixToolJSON(context.Background(), []byte(`{"detector":"SA1006","file":"/nonexistent/app.go"}`)); err == nil || strings.Contains(err.Error(), "required") {
+		t.Fatalf("expected a fixer error (not a validation error), got %v", err)
 	}
 }
