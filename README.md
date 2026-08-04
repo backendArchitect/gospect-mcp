@@ -471,6 +471,10 @@ restored exactly:
 3. The module must still **build** (`go build ./...`) — add `-test` to also require `go test`.
 4. On success the change is left **uncommitted** for you to review (`git diff`); nothing is committed.
 
+The agent's own output **streams to stderr** as it works, so a multi-minute fix visibly makes
+progress (silence it with `-quiet`). Each fix has a time budget — `-timeout` (default `5m`, `0`
+disables) — after which the agent is killed and that finding is rolled back and skipped.
+
 Exit codes: `0` fixed, `1` not applied (rolled back), `2` error (e.g. dirty tree, no agent found).
 
 ## The guarded `fix` MCP tool (opt-in)

@@ -10,7 +10,13 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
+
+// waitDelay bounds how long we wait for the agent's output pipe to drain after its context is
+// cancelled. Without it, a killed agent whose orphaned child processes still hold the pipe open
+// would block cmd.Wait indefinitely — defeating the caller's timeout.
+const waitDelay = 3 * time.Second
 
 // promptToken is the placeholder replaced by the fix prompt in a command template.
 const promptToken = "{prompt}"
@@ -90,6 +96,7 @@ func (a Agent) Run(ctx context.Context, dir, prompt string, out io.Writer) error
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = out, out
+	cmd.WaitDelay = waitDelay // don't let a killed agent's orphaned children block Wait forever
 	if viaStdin {
 		cmd.Stdin = strings.NewReader(prompt)
 	}
