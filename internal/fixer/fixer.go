@@ -8,11 +8,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/agent"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
@@ -25,11 +27,12 @@ import (
 type Options struct {
 	Finding       detect.Finding
 	Agent         agent.Agent
-	Deterministic bool         // apply the analyzer's SuggestedFix instead of driving an agent
-	RunTests      bool         // also run `go test ./...` as part of verification
-	DryRun        bool         // build the prompt and stop (don't invoke the agent)
-	Progress      func(string) // human-readable progress (stderr)
-	Output        *bytes.Buffer
+	Deterministic bool          // apply the analyzer's SuggestedFix instead of driving an agent
+	RunTests      bool          // also run `go test ./...` as part of verification
+	DryRun        bool          // build the prompt and stop (don't invoke the agent)
+	Timeout       time.Duration // abort the agent if it runs longer than this (0 = no limit)
+	Progress      func(string)  // human-readable progress (stderr)
+	Output        io.Writer     // where the agent's live output goes (nil = discard)
 }
 
 // Result is the outcome of one fix attempt.
@@ -108,10 +111,20 @@ func Fix(ctx context.Context, dir string, o Options) (*Result, error) {
 			return finishRollback(top, res, "applying the suggested edit failed: "+err.Error(), nil), nil
 		}
 	} else {
-		progress(fmt.Sprintf("invoking %s to fix %s at %s …", o.Agent.Name, f.Detector, loc(f)))
-		if err := o.Agent.Run(ctx, top, prompt, agentOut(o)); err != nil {
-			rollback(top) // agent crashed — revert anything it half-wrote
-			res.Reason = "agent failed: " + err.Error()
+		actx := ctx
+		if o.Timeout > 0 {
+			var cancel context.CancelFunc
+			actx, cancel = context.WithTimeout(ctx, o.Timeout)
+			defer cancel()
+		}
+		progress(fmt.Sprintf("invoking %s to fix %s at %s (streaming its output below; up to %s)…", o.Agent.Name, f.Detector, loc(f), timeoutLabel(o.Timeout)))
+		if err := o.Agent.Run(actx, top, prompt, agentOut(o)); err != nil {
+			rollback(top) // agent crashed or timed out — revert anything it half-wrote
+			if actx.Err() == context.DeadlineExceeded {
+				res.Reason = fmt.Sprintf("agent timed out after %s (raise -timeout, or use -safe for deterministic fixes)", o.Timeout)
+			} else {
+				res.Reason = "agent failed: " + err.Error()
+			}
 			res.RolledBack = true
 			return res, nil
 		}
@@ -299,11 +312,19 @@ func goCmd(dir string, args ...string) (string, error) {
 	return out.String(), err
 }
 
-func agentOut(o Options) *bytes.Buffer {
+// timeoutLabel renders the agent time budget for progress text ("no limit" when unset).
+func timeoutLabel(d time.Duration) string {
+	if d <= 0 {
+		return "no limit"
+	}
+	return d.String()
+}
+
+func agentOut(o Options) io.Writer {
 	if o.Output != nil {
 		return o.Output
 	}
-	return &bytes.Buffer{}
+	return io.Discard
 }
 
 func tail(s string) string {

@@ -31,6 +31,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/agent"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
@@ -121,6 +122,8 @@ Flags (fix):
   -n <count>          fix up to N findings; n>1 commits each verified fix (default 1, uncommitted)
   -dry-run            print the fix prompt(s) only; don't invoke the agent or edit code
   -test               run "go test ./..." as part of verifying each fix
+  -timeout <dur>      abort the agent if one fix takes longer than this (default 5m; 0 = no limit)
+  (the agent's output streams to stderr so a long fix visibly progresses; -quiet silences it)
   (use -detector/-min-severity/… to target; requires a clean git tree; every fix is verified)
 
 Findings are ordered by importance: bugs (high severity) first, then medium, then low.
@@ -208,6 +211,7 @@ func runFix() {
 	safe := fs.Bool("safe", false, "apply only deterministic analyzer fixes (no AI agent); skips findings without one")
 	n := fs.Int("n", 1, "max findings to fix; n>1 commits each verified fix so the next starts from a clean tree")
 	test := fs.Bool("test", false, "run `go test ./...` as part of verifying each fix")
+	timeout := fs.Duration("timeout", 5*time.Minute, "abort the agent if a single fix takes longer than this (0 = no limit)")
 	dryRun := fs.Bool("dry-run", false, "print the fix prompt(s) only; don't invoke the agent or edit code")
 	staticcheck := fs.Bool("staticcheck", false, "include staticcheck findings as fix candidates")
 	untested := fs.Bool("untested", false, "include untested-export findings as fix candidates")
@@ -270,9 +274,15 @@ func runFix() {
 	}
 
 	batch := *n > 1
+	// Stream the agent's own output to stderr so a long-running fix visibly makes progress
+	// (silence it under -quiet). Deterministic fixes produce no agent output.
+	var agentOut io.Writer
+	if show && !*safe {
+		agentOut = os.Stderr
+	}
 	var fixed, skipped int
 	for _, f := range candidates {
-		r, err := fixer.Fix(ctx, dir, fixer.Options{Finding: f, Agent: ag, Deterministic: *safe, RunTests: *test, Progress: progressFn(show)})
+		r, err := fixer.Fix(ctx, dir, fixer.Options{Finding: f, Agent: ag, Deterministic: *safe, RunTests: *test, Timeout: *timeout, Progress: progressFn(show), Output: agentOut})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "fix:", err)
 			os.Exit(2)

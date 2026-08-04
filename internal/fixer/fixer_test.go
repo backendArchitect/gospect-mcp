@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/agent"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
@@ -148,6 +149,27 @@ func TestFix_Integration(t *testing.T) {
 		}
 		if st := status(t, dir); st != "" {
 			t.Fatalf("working tree not restored after rollback: %q", st)
+		}
+	})
+
+	t.Run("agent timeout rolled back", func(t *testing.T) {
+		dir := newRepo(t)
+		todo.File = filepath.Join(dir, "app.go")
+		// An agent that would eventually make a change, but hangs past the timeout first.
+		script := writeScript(t, "sleep 5\nsed -i '/TODO/d' app.go\n")
+		ag, _ := agent.Parse(script + " {prompt}")
+		res, err := Fix(context.Background(), dir, Options{Finding: todo, Agent: ag, Timeout: 200 * time.Millisecond})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Applied || !res.RolledBack {
+			t.Fatalf("expected a timeout rollback, got %+v", res)
+		}
+		if !strings.Contains(res.Reason, "timed out") {
+			t.Fatalf("reason = %q, want a timeout message", res.Reason)
+		}
+		if st := status(t, dir); st != "" {
+			t.Fatalf("working tree not restored after timeout: %q", st)
 		}
 	})
 }
