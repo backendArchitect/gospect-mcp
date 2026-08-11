@@ -1,9 +1,12 @@
 name: ci
 
-# Gate for pull requests. Pushes to main go through release.yml (which also tests before releasing).
+# Gate for pull requests, plus every feature-branch push for fast feedback without opening a PR.
+# Pushes to main go through release.yml (which tests before releasing), so main is excluded here.
 on:
   pull_request:
     branches: [main]
+  push:
+    branches-ignore: [main]
 
 permissions:
   contents: read
