@@ -2,7 +2,8 @@
 #
 # Copy this to `.github/workflows/gospect.yml`. It runs the gospect composite
 # action (see ../action.yml) on every pull request and push to main: it fails
-# the job on high-severity findings and posts them as code-scanning annotations.
+# the job on high-severity findings, posts them as a PR comment, and uploads
+# them as code-scanning annotations.
 name: gospect
 
 on:
@@ -12,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write     # required only when comment: true (to post the PR comment)
   security-events: write   # required only when sarif: true (to upload annotations)
 
 jobs:
@@ -25,7 +27,8 @@ jobs:
           path: .            # module directory (or monorepo root)
           patterns: ./...    # package patterns to scan
           fail-on: high      # gate: fail on findings at/above this severity (high|medium|low)
+          comment: true      # post (and update) a findings comment on the PR
           sarif: true        # also upload SARIF so findings show as PR annotations
           # ignore: copylocks,todo   # optional: comma-separated detectors to silence
-          # gate: false              # optional: annotate only, never fail the job
+          # gate: false              # optional: report only (comment/annotate), never fail the job
           # version: v1.2.3          # optional: pin a gospect version (default: latest)

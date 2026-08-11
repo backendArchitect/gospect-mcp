@@ -398,6 +398,23 @@ Drop-in GitHub Action (full copy-paste workflow: [examples/gospect.yml](examples
     # ignore: todo,go-version
 ```
 
+**Post findings as a PR comment.** Set `comment: true` and grant the job `pull-requests: write` —
+gospect posts a single sticky comment (a findings table, bugs first) that updates in place on every
+push. Like SARIF, it's posted *before* the gate, so the comment appears even when the check fails:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write     # required for the PR comment
+steps:
+  - uses: actions/checkout@v4
+  - uses: backendArchitect/gospect-mcp@v1
+    with:
+      path: .
+      comment: true        # post + update the findings comment
+      fail-on: high        # still gate the job; set gate: false to comment only
+```
+
 **Post findings as code-scanning annotations (SARIF).** Set `sarif: true` and grant the job
 `security-events: write` — findings then show up inline on the PR and in the Security tab. SARIF is
 generated and uploaded *before* the gate, so annotations appear even when the check fails:

@@ -1,5 +1,5 @@
 name: gospect-mcp
-description: "Report-first Go code scanner — fail CI on findings, and optionally post them as SARIF code-scanning annotations."
+description: "Report-first Go code scanner — fail CI on findings, post them as a PR comment, and/or upload SARIF code-scanning annotations."
 branding:
   icon: search
   color: purple
@@ -25,6 +25,10 @@ inputs:
     description: "Fail the job on findings at/above fail-on. Set to false to only annotate (see sarif)."
     required: false
     default: "true"
+  comment:
+    description: "Post (and update) a sticky findings comment on the PR. Requires the job to have `pull-requests: write` permission. Only runs on pull_request events."
+    required: false
+    default: "false"
   sarif:
     description: "Upload findings as SARIF so they appear as code-scanning annotations. Requires the job to have `security-events: write` permission."
     required: false
@@ -59,6 +63,56 @@ runs:
       with:
         sarif_file: gospect.sarif
         category: ${{ inputs.sarif-category }}
+
+    # PR comment (rendered + posted BEFORE the gate, so it appears even when the gate fails).
+    - name: gospect scan (render PR comment)
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        IGNORE: ${{ inputs.ignore }}   # scan has no -ignore flag; filter these detectors below
+      run: |
+        gospect-mcp scan -format json "${{ inputs.path }}" ${{ inputs.patterns }} > gospect.json
+        python3 - <<'PY' > gospect-comment.md
+        import json, os
+        r = json.load(open("gospect.json"))
+        ignore = {d.strip() for d in os.environ.get("IGNORE", "").split(",") if d.strip()}
+        findings = [f for f in r["findings"] if f["detector"] not in ignore]  # keep gospect's bugs-first order
+        emoji = {"high": "🔴", "medium": "🟠", "low": "🟡"}
+        bysev = {}
+        for f in findings:
+            bysev[f["severity"]] = bysev.get(f["severity"], 0) + 1
+        L = ["<!-- gospect-report -->", "## 🩺 gospect findings", ""]
+        if not findings:
+            L.append("✅ **No findings.** This module is clean.")
+        else:
+            chips = " · ".join(f'{emoji.get(s,"")} {bysev[s]} {s}' for s in ("high", "medium", "low") if s in bysev)
+            L += [f"**{len(findings)}** finding(s) — {chips}", "",
+                  "| | severity | detector | location | message |",
+                  "|---|---|---|---|---|"]
+            for f in findings:
+                loc = f["file"].split("/")[-1] + ":" + str(f["line"])
+                msg = f["message"].replace("|", "\\|")[:100]
+                L.append(f'| {emoji.get(f["severity"],"")} | {f["severity"]} | `{f["detector"]}` | `{loc}` | {msg} |')
+        L += ["", "<sub>Posted by the gospect GitHub Action. Bugs are listed first.</sub>"]
+        open("gospect-comment.md", "w").write("\n".join(L))
+        PY
+    - name: Post / update the gospect PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const body = fs.readFileSync('gospect-comment.md', 'utf8');
+          const marker = '<!-- gospect-report -->';
+          const {owner, repo} = context.repo;
+          const issue_number = context.issue.number;
+          const {data: comments} = await github.rest.issues.listComments({owner, repo, issue_number});
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+          } else {
+            await github.rest.issues.createComment({owner, repo, issue_number, body});
+          }
 
     - name: gospect check
       if: inputs.gate == 'true'
