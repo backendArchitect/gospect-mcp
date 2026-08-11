@@ -388,7 +388,7 @@ gospect-mcp check -format json .           # machine-readable
 Flags may appear anywhere (before, after, or between the path/patterns). Exit codes: `0` clean,
 `1` blocking findings, `2` error.
 
-Drop-in GitHub Action:
+Drop-in GitHub Action (full copy-paste workflow: [examples/gospect.yml](examples/gospect.yml)):
 
 ```yaml
 - uses: backendArchitect/gospect-mcp@v1

@@ -22,3 +22,47 @@ jobs:
         run: go test ./...
       - name: Build
         run: go build ./...
+
+  # Dogfood + regression guard: run the built binary end-to-end (CLI flags, exit codes, SARIF),
+  # which `go test` doesn't exercise. Proves gospect catches the planted bugs in testdata/buggy
+  # AND stays clean on its own source.
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Build binary
+        run: go build -o gospect-mcp .
+
+      - name: Regression guard — the fixture's high-severity bugs must fail the gate
+        run: |
+          set +e
+          ./gospect-mcp check -quiet -fail-on high testdata/buggy ./...
+          code=$?
+          set -e
+          [ "$code" -eq 1 ] || { echo "::error::expected exit 1 on testdata/buggy, got $code"; exit 1; }
+          echo "ok: gate failed as expected (exit 1)"
+
+      - name: Regression guard — every planted detector must fire
+        run: |
+          json=$(./gospect-mcp scan -quiet -staticcheck testdata/buggy ./...)
+          for d in nilness copylocks lostcancel stub unchecked-error todo go-version SA1006; do
+            echo "$json" | grep -q "\"$d\"" || { echo "::error::detector $d did not fire on testdata/buggy"; exit 1; }
+            echo "ok: $d"
+          done
+
+      - name: SARIF output is well-formed
+        run: |
+          ./gospect-mcp scan -quiet -format sarif testdata/buggy ./... > gospect.sarif
+          python3 -c "import json,sys; s=json.load(open('gospect.sarif')); assert s['version']=='2.1.0'; assert len(s['runs'][0]['results'])>0; print('ok: SARIF', s['version'], len(s['runs'][0]['results']), 'results')"
+
+      - name: Dogfood — gospect must stay clean on its own source
+        run: |
+          set +e
+          ./gospect-mcp check -quiet -fail-on high -exclude testdata . ./...
+          code=$?
+          set -e
+          [ "$code" -eq 0 ] || { echo "::error::gospect flagged high-severity findings in its own code (exit $code)"; exit 1; }
+          echo "ok: gospect is clean on itself"

@@ -25,7 +25,7 @@ func TestScan_Detectors(t *testing.T) {
 	}
 
 	// One per detector we've implemented; testdata/buggy contains a case for each.
-	for _, want := range []string{"nilness", "stub", "unchecked-error", "todo", "go-version"} {
+	for _, want := range []string{"nilness", "copylocks", "lostcancel", "stub", "unchecked-error", "todo", "go-version"} {
 		if !got[want] {
 			t.Errorf("expected a %q finding; got detectors %v (findings: %+v)", want, got, rep.Findings)
 		}

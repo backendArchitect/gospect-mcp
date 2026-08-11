@@ -1,0 +1,31 @@
+# Example CI workflow for using gospect-mcp in your own Go repository.
+#
+# Copy this to `.github/workflows/gospect.yml`. It runs the gospect composite
+# action (see ../action.yml) on every pull request and push to main: it fails
+# the job on high-severity findings and posts them as code-scanning annotations.
+name: gospect
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write   # required only when sarif: true (to upload annotations)
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: backendArchitect/gospect-mcp@v1
+        with:
+          path: .            # module directory (or monorepo root)
+          patterns: ./...    # package patterns to scan
+          fail-on: high      # gate: fail on findings at/above this severity (high|medium|low)
+          sarif: true        # also upload SARIF so findings show as PR annotations
+          # ignore: copylocks,todo   # optional: comma-separated detectors to silence
+          # gate: false              # optional: annotate only, never fail the job
+          # version: v1.2.3          # optional: pin a gospect version (default: latest)
