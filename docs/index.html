@@ -189,6 +189,7 @@
       <a class="hide" href="#install">Install</a>
       <a class="hide" href="#perf">Performance</a>
       <a class="hide" href="#agents">Agents</a>
+      <a class="hide" href="#fix">Fix</a>
       <a class="btn ghost cta" href="https://github.com/backendArchitect/gospect-mcp" style="padding:8px 16px">★ GitHub</a>
     </nav>
   </div>
@@ -320,8 +321,9 @@ gospect: 6 finding(s) in ./service (272 packages, 1 module)
     "gospect": { "command": "gospect-mcp", "args": [] }
   }
 }</pre></div>
-    <p class="muted" style="margin-top:14px">Report-only means an agent <em>can’t</em> change your code through gospect —
-      only surface findings, and, on request, a fix envelope.</p>
+    <p class="muted" style="margin-top:14px">By default the server is report-only — an agent <em>can’t</em> change your code
+      through gospect, only surface findings and, on request, a fix envelope. Verified fixing is a separate, opt-in
+      step (<a class="grad-text" href="#fix">below</a>).</p>
   </div>
 </section>
 
@@ -339,9 +341,32 @@ gospect-mcp check -baseline base.json .             # gate only on NEW findings<
   </div>
 </section>
 
+<section id="fix">
+  <div class="wrap">
+    <p class="eyebrow">When you want it</p>
+    <h2>Report first. Then fix — only if you ask.</h2>
+    <p class="lead">The scan never edits your code. Fixing is a separate, explicit command: it applies one
+      change, re-scans, and <strong>keeps it only if it verifies</strong> — the finding is gone, no new findings
+      appeared, and the module still builds. Anything else is rolled back.</p>
+    <div class="code"><button class="copy">Copy</button><pre>gospect-mcp fix -safe .               # deterministic analyzer fixes — no AI, still verified
+gospect-mcp fix -detector nilness .   # drive your installed agent (claude, aider…), then verify
+gospect-mcp fix -n 5 .                 # fix several; each verified fix is its own commit
+gospect-mcp --allow-fix               # opt-in: expose a guarded, verified fix tool over MCP</pre></div>
+    <p class="muted" style="margin-top:14px">Every fix requires a clean git tree, so a rejected change reverts
+      cleanly and never leaves you half-edited. The MCP server stays report-only unless you start it with
+      <code>--allow-fix</code> — and even then the exposed fix tool is deterministic and self-verifying. No surprise
+      rewrites, ever.</p>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
     <p>Open source · <a class="grad-text" href="https://github.com/backendArchitect/gospect-mcp">github.com/backendArchitect/gospect-mcp</a></p>
+    <p class="muted" style="margin-top:6px">
+      <a class="grad-text" href="https://github.com/backendArchitect/gospect-mcp/blob/main/CONTRIBUTING.md">Contributing</a> ·
+      <a class="grad-text" href="https://github.com/backendArchitect/gospect-mcp/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a> ·
+      MIT License
+    </p>
     <p class="muted" style="margin-top:6px">Built with a “deletion over addition, boring over clever” philosophy.</p>
   </div>
 </footer>
