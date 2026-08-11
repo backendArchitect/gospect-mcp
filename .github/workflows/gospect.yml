@@ -1,6 +1,7 @@
 # Dogfood: gospect scans its own source on every PR / feature-branch push, built FROM SOURCE so it
-# reflects unreleased changes. It prints a findings table into the check summary (visible on the PR)
-# and fails the job on any high-severity finding. testdata/ is excluded — it holds deliberate bugs.
+# reflects unreleased changes. On a PR it posts (and updates) a single sticky comment with the
+# findings table, and it fails the job on any high-severity finding. testdata/ is excluded — it
+# holds deliberate bugs.
 name: gospect
 
 on:
@@ -10,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write   # needed to post the findings comment on a PR
 
 jobs:
   scan:
@@ -23,24 +25,53 @@ jobs:
       - name: Build gospect from source
         run: go build -o gospect-mcp .
 
-      - name: Scan and write findings to the check summary
+      - name: Scan and render a findings report
         run: |
           ./gospect-mcp scan -quiet -staticcheck -exclude testdata . ./... > findings.json
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' > findings.md
           import json
           r = json.load(open("findings.json"))
-          print("## gospect findings\n")
-          print(f'**{r["finding_count"]}** finding(s) — by severity: `{r.get("by_severity")}`\n')
-          if r["finding_count"]:
-              print("| severity | category | detector | location | message |")
-              print("|---|---|---|---|---|")
+          n = r["finding_count"]
+          emoji = {"high": "🔴", "medium": "🟠", "low": "🟡"}
+          lines = ["<!-- gospect-report -->", "## 🩺 gospect findings", ""]
+          if n == 0:
+              lines.append("✅ **No findings.** This module is clean.")
+          else:
+              bysev = r.get("by_severity") or {}
+              chips = " · ".join(f'{emoji.get(s,"")} {c} {s}' for s, c in bysev.items())
+              lines.append(f"**{n}** finding(s) — {chips}")
+              lines.append("")
+              lines.append("| | severity | detector | location | message |")
+              lines.append("|---|---|---|---|---|")
               for f in r["findings"]:
                   loc = f["file"].split("/")[-1] + ":" + str(f["line"])
-                  msg = f["message"].replace("|", "\\|")[:90]
-                  print(f'| {f["severity"]} | {f["category"]} | {f["detector"]} | `{loc}` | {msg} |')
-          else:
-              print("_No findings._")
+                  msg = f["message"].replace("|", "\\|")[:100]
+                  lines.append(f'| {emoji.get(f["severity"],"")} | {f["severity"]} | `{f["detector"]}` | `{loc}` | {msg} |')
+              lines.append("")
+              lines.append("_Bugs are listed first. The job fails only on **high**-severity findings._")
+          lines.append("")
+          lines.append("<sub>Posted by gospect, built from this branch. testdata/ (deliberate bugs) is excluded.</sub>")
+          open("findings.md", "w").write("\n".join(lines))
           PY
+          cat findings.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post / update the findings comment on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('findings.md', 'utf8');
+            const marker = '<!-- gospect-report -->';
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const {data: comments} = await github.rest.issues.listComments({owner, repo, issue_number});
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
 
       - name: Gate — fail on high-severity findings
         run: ./gospect-mcp check -quiet -fail-on high -exclude testdata . ./...
