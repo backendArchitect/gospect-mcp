@@ -1,0 +1,46 @@
+# Dogfood: gospect scans its own source on every PR / feature-branch push, built FROM SOURCE so it
+# reflects unreleased changes. It prints a findings table into the check summary (visible on the PR)
+# and fails the job on any high-severity finding. testdata/ is excluded — it holds deliberate bugs.
+name: gospect
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build gospect from source
+        run: go build -o gospect-mcp .
+
+      - name: Scan and write findings to the check summary
+        run: |
+          ./gospect-mcp scan -quiet -staticcheck -exclude testdata . ./... > findings.json
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          r = json.load(open("findings.json"))
+          print("## gospect findings\n")
+          print(f'**{r["finding_count"]}** finding(s) — by severity: `{r.get("by_severity")}`\n')
+          if r["finding_count"]:
+              print("| severity | category | detector | location | message |")
+              print("|---|---|---|---|---|")
+              for f in r["findings"]:
+                  loc = f["file"].split("/")[-1] + ":" + str(f["line"])
+                  msg = f["message"].replace("|", "\\|")[:90]
+                  print(f'| {f["severity"]} | {f["category"]} | {f["detector"]} | `{loc}` | {msg} |')
+          else:
+              print("_No findings._")
+          PY
+
+      - name: Gate — fail on high-severity findings
+        run: ./gospect-mcp check -quiet -fail-on high -exclude testdata . ./...
