@@ -3,6 +3,9 @@ package detect
 import (
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/checker"
+	"golang.org/x/tools/go/analysis/passes/appends"
+	"golang.org/x/tools/go/analysis/passes/atomic"
+	"golang.org/x/tools/go/analysis/passes/bools"
 	"golang.org/x/tools/go/analysis/passes/copylock"
 	"golang.org/x/tools/go/analysis/passes/errorsas"
 	"golang.org/x/tools/go/analysis/passes/httpresponse"
@@ -10,8 +13,15 @@ import (
 	"golang.org/x/tools/go/analysis/passes/lostcancel"
 	"golang.org/x/tools/go/analysis/passes/nilfunc"
 	"golang.org/x/tools/go/analysis/passes/nilness"
+	"golang.org/x/tools/go/analysis/passes/printf"
+	"golang.org/x/tools/go/analysis/passes/shift"
+	"golang.org/x/tools/go/analysis/passes/sigchanyzer"
+	"golang.org/x/tools/go/analysis/passes/sortslice"
+	"golang.org/x/tools/go/analysis/passes/stringintconv"
+	"golang.org/x/tools/go/analysis/passes/timeformat"
 	"golang.org/x/tools/go/analysis/passes/unmarshal"
 	"golang.org/x/tools/go/analysis/passes/unreachable"
+	"golang.org/x/tools/go/analysis/passes/unusedresult"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gordonklaus/ineffassign/pkg/ineffassign"
@@ -28,17 +38,27 @@ type analyzerMeta struct {
 // carries the category/severity/confidence we report it under. Type/SSA-backed checks are high
 // confidence; the two more heuristic ones (nilfunc, unreachable) are medium.
 var bugAnalyzers = map[*analysis.Analyzer]analyzerMeta{
-	nilness.Analyzer:      {"bug", "high", "high"},         // SSA nil dereference
-	lostcancel.Analyzer:   {"bug", "high", "high"},         // context CancelFunc never called -> leak
-	httpresponse.Analyzer: {"bug", "high", "high"},         // using resp before checking err / not closing body
-	unmarshal.Analyzer:    {"bug", "high", "high"},         // non-pointer passed to Unmarshal
-	copylock.Analyzer:     {"bug", "high", "high"},         // a value containing a lock is copied
-	errorsas.Analyzer:     {"bug", "high", "high"},         // errors.As target is not a pointer to an error
-	bodyclose.Analyzer:    {"bug", "high", "high"},         // HTTP response body never closed -> leak
-	nilfunc.Analyzer:      {"bug", "medium", "high"},       // useless comparison of func value to nil
-	unreachable.Analyzer:  {"bug", "medium", "high"},       // unreachable code
-	ineffassign.Analyzer:  {"bug", "low", "medium"},        // value assigned but never used
-	loopclosure.Analyzer:  {"modernize", "medium", "high"}, // pre-1.22 loop-var capture (no-op on go>=1.22)
+	nilness.Analyzer:       {"bug", "high", "high"},         // SSA nil dereference
+	lostcancel.Analyzer:    {"bug", "high", "high"},         // context CancelFunc never called -> leak
+	httpresponse.Analyzer:  {"bug", "high", "high"},         // using resp before checking err / not closing body
+	unmarshal.Analyzer:     {"bug", "high", "high"},         // non-pointer passed to Unmarshal
+	copylock.Analyzer:      {"bug", "high", "high"},         // a value containing a lock is copied
+	errorsas.Analyzer:      {"bug", "high", "high"},         // errors.As target is not a pointer to an error
+	bodyclose.Analyzer:     {"bug", "high", "high"},         // HTTP response body never closed -> leak
+	printf.Analyzer:        {"bug", "high", "high"},         // Printf format/argument mismatch or non-constant format
+	atomic.Analyzer:        {"bug", "high", "high"},         // sync/atomic result assigned back (lost update)
+	sortslice.Analyzer:     {"bug", "high", "high"},         // sort.Slice on a non-slice -> runtime panic
+	unusedresult.Analyzer:  {"bug", "medium", "high"},       // ignored result of errors.New/fmt.Errorf/etc.
+	stringintconv.Analyzer: {"bug", "medium", "high"},       // string(int) — usually meant strconv.Itoa (has a fix)
+	timeformat.Analyzer:    {"bug", "medium", "high"},       // wrong time layout, e.g. 2006-02-01 (has a fix)
+	sigchanyzer.Analyzer:   {"bug", "medium", "high"},       // unbuffered channel passed to signal.Notify
+	appends.Analyzer:       {"bug", "medium", "high"},       // append with no values to append
+	shift.Analyzer:         {"bug", "medium", "high"},       // shift amount >= the operand's width
+	bools.Analyzer:         {"bug", "medium", "high"},       // redundant/suspicious boolean expression
+	nilfunc.Analyzer:       {"bug", "medium", "high"},       // useless comparison of func value to nil
+	unreachable.Analyzer:   {"bug", "medium", "high"},       // unreachable code
+	ineffassign.Analyzer:   {"bug", "low", "medium"},        // value assigned but never used
+	loopclosure.Analyzer:   {"modernize", "medium", "high"}, // pre-1.22 loop-var capture (no-op on go>=1.22)
 }
 
 // RunBugDetectors runs the analyzer set over already-loaded packages and maps each diagnostic
