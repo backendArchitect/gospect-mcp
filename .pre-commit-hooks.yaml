@@ -1,0 +1,19 @@
+# pre-commit hook definitions. In your repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/backendArchitect/gospect-mcp
+#       rev: v1.0.0            # pin a released tag
+#       hooks:
+#         - id: gospect
+#
+# pre-commit builds the binary with the Go toolchain (language: golang), so contributors need Go
+# installed but nothing else. Override the gate with `args: [check, -fail-on, medium, .]`.
+- id: gospect
+  name: gospect (Go bug scan)
+  description: "Report-first Go bug scanner — fails the commit on high-severity findings."
+  entry: gospect-mcp
+  args: ["check", "-fail-on", "high", "-quiet", "."]
+  language: golang
+  types: [go]
+  pass_filenames: false
+  require_serial: true
