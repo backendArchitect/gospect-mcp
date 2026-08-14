@@ -6,7 +6,7 @@ name: site-preview
 
 on:
   pull_request:
-    paths: ["docs/index.html"]
+    paths: ["docs/**"]
 
 permissions:
   contents: read
