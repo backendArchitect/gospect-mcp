@@ -277,7 +277,7 @@ Filter noisy heuristics with `-min-confidence high`.
 
 | Category | Detectors |
 |---|---|
-| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
+| **bug** | `nilness` (SSA nil-deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `printf` (format/arg mismatch), `atomic` (lost `sync/atomic` update), `sortslice` (non-slice to `sort.Slice`), `unusedresult` (ignored `errors.New`/`fmt.Errorf`), `stringintconv` (`string(int)`), `timeformat` (wrong time layout), `sigchanyzer` (unbuffered signal channel), `appends` (empty `append`), `shift` (over-wide shift), `bools` (redundant boolean), `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
 | **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME` markers, unchecked error returns (errcheck-lite) |
 | **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
 | **over-engineered** | `high-complexity` — functions whose cyclomatic **or** cognitive complexity exceeds conservative thresholds (built-in, no external graph) |
