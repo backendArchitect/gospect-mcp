@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  packages: write   # push the Docker image to GHCR
 
 jobs:
   test:
@@ -90,3 +91,29 @@ jobs:
           files: |
             *.tar.gz
             *.tar.gz.sha256
+
+  docker:
+    needs: tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+      - uses: docker/setup-qemu-action@v3        # for arm64 emulation
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ needs.tag.outputs.tag }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}
+            ghcr.io/${{ github.repository }}:latest

@@ -1,0 +1,11 @@
+.git
+.github
+docs
+examples
+packaging
+testdata
+*.md
+*.png
+*.sarif
+install.sh
+install.ps1

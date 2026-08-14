@@ -559,6 +559,30 @@ irm https://raw.githubusercontent.com/backendArchitect/gospect-mcp/main/install.
 go install github.com/backendArchitect/gospect-mcp@latest
 ```
 
+**Homebrew** (macOS / Linux):
+
+```sh
+brew install backendArchitect/tap/gospect-mcp
+```
+
+**Docker** — the image bundles the Go toolchain (gospect needs it to load a module), so it scans any
+mounted repo with nothing installed on the host:
+
+```sh
+docker run --rm -v "$PWD":/work ghcr.io/backendarchitect/gospect-mcp scan ./...
+docker run --rm -v "$PWD":/work ghcr.io/backendarchitect/gospect-mcp check -fail-on high ./...
+```
+
+**pre-commit** — gate commits locally. In your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/backendArchitect/gospect-mcp
+    rev: v1.0.0            # pin a released tag
+    hooks:
+      - id: gospect
+```
+
 **Prebuilt binaries** — Linux / macOS / Windows, amd64 & arm64 — from the
 [Releases page](https://github.com/backendArchitect/gospect-mcp/releases). Each is a
 `gospect-mcp_<tag>_<os>_<arch>.tar.gz` with a `.sha256` checksum.
@@ -582,8 +606,12 @@ unchecked error, an old `go.mod`) that the test suite asserts each detector catc
 
 - **PRs** run `go vet` + `go test` + `go build` (`ci.yml`).
 - **Pushes to `main`** run the tests and then auto-cut a release (`release.yml`): patch-bump a
-  `vX.Y.Z` tag and publish cross-platform binaries + checksums to GitHub Releases. Add
-  `[skip release]` to a commit message to skip releasing.
+  `vX.Y.Z` tag, publish cross-platform binaries + checksums to GitHub Releases, and push a
+  multi-arch Docker image to `ghcr.io/backendarchitect/gospect-mcp`. Add `[skip release]` to a
+  commit message to skip releasing.
+
+See [`packaging/`](packaging/README.md) for the distribution channels (Docker, Homebrew tap,
+pre-commit, GitHub Marketplace) and their per-release steps.
 
 ---
 
