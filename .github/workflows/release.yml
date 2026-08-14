@@ -106,6 +106,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lowercase image name          # GHCR repository names must be lowercase
+        id: img
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - name: Build & push image
         uses: docker/build-push-action@v6
         with:
@@ -115,5 +118,5 @@ jobs:
           build-args: |
             VERSION=${{ needs.tag.outputs.tag }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}
-            ghcr.io/${{ github.repository }}:latest
+            ${{ steps.img.outputs.name }}:${{ needs.tag.outputs.tag }}
+            ${{ steps.img.outputs.name }}:latest
