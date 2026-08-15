@@ -7,7 +7,7 @@
 # Usage:
 #   docker run --rm -v "$PWD":/work ghcr.io/backendarchitect/gospect-mcp scan ./...
 #   docker run --rm -v "$PWD":/work ghcr.io/backendarchitect/gospect-mcp check -fail-on high ./...
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.25
 
 FROM golang:${GO_VERSION}-alpine AS build
 ARG VERSION=dev   # release.yml passes the tag so `gospect-mcp version` matches the image tag

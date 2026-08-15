@@ -8,8 +8,8 @@ By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Build from source
 
-You need **Go 1.21+** (the module targets a newer toolchain, but the code builds
-on 1.21 and up). No C compiler, no external services.
+You need **Go 1.25+** (the analysis libraries gospect wraps — `golang.org/x/tools` and
+`staticcheck` — require it). No C compiler, no external services.
 
 ```sh
 git clone https://github.com/backendArchitect/gospect-mcp
