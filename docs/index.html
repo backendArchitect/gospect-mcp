@@ -112,6 +112,7 @@
   @keyframes spin{to{transform:translateX(-50%) rotate(360deg)}}
   @media(prefers-reduced-motion:reduce){.hero::before{animation:none}}
   .hero-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:54px;align-items:center}
+  .hero-grid > *{min-width:0}   /* let the terminal's long lines scroll, not widen the grid */
   @media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:42px;text-align:center}}
   .badge{display:inline-flex;align-items:center;gap:9px;font-size:.82rem;color:var(--muted);
     border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:7px 16px;margin-bottom:24px}
