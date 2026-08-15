@@ -8,7 +8,7 @@
 <title>gospect-mcp — Report-First Go Code Scanner &amp; Bug Finder (MCP Server + CLI)</title>
 <meta name="description" content="gospect-mcp is a Go-only, report-first static analysis tool. It runs the real Go toolchain (go/analysis, SSA) to find genuine bugs — nil derefs, leaked contexts, unchecked errors — as an MCP server or CLI. It never edits your code by default.">
 <meta name="keywords" content="go static analysis, golang bug finder, go code scanner, go linter, MCP server, model context protocol, go security scanner, govulncheck, SARIF, go nil dereference, go monorepo linter, AI code review, claude code, cursor MCP">
-<meta name="author" content="backendArchitect">
+<meta name="author" content="Vatsal Chauhan">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#080a10" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#fbfcfe" media="(prefers-color-scheme: light)">
@@ -44,7 +44,7 @@
   "programmingLanguage": "Go",
   "keywords": "go static analysis, golang bug finder, MCP server, SARIF, govulncheck",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-  "author": { "@type": "Person", "name": "backendArchitect" }
+  "author": { "@type": "Person", "name": "Vatsal Chauhan", "url": "https://github.com/backendArchitect" }
 }
 </script>
 
@@ -105,19 +105,30 @@
   @media(max-width:720px){.nav nav a.hide{display:none}}
 
   /* hero */
-  .hero{text-align:center;padding:104px 0 64px;position:relative}
+  .hero{padding:76px 0 80px;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;z-index:-1;top:-40%;left:50%;width:130%;height:180%;transform:translateX(-50%);
+    background:conic-gradient(from 90deg at 50% 50%, rgba(56,189,248,.12), rgba(45,212,191,.08) 30%, rgba(167,139,250,.12) 60%, rgba(56,189,248,.12));
+    filter:blur(90px);opacity:.75;animation:spin 30s linear infinite;pointer-events:none}
+  @keyframes spin{to{transform:translateX(-50%) rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){.hero::before{animation:none}}
+  .hero-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:54px;align-items:center}
+  .hero-grid > *{min-width:0}   /* let the terminal's long lines scroll, not widen the grid */
+  @media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:42px;text-align:center}}
   .badge{display:inline-flex;align-items:center;gap:9px;font-size:.82rem;color:var(--muted);
-    border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:7px 16px;margin-bottom:30px}
+    border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:7px 16px;margin-bottom:24px}
   .badge b{color:var(--teal);font-weight:700}
-  .hero h1{font-size:clamp(2.6rem,6.4vw,4.5rem);line-height:1.03;letter-spacing:-.04em;margin:0 0 22px;font-weight:900}
+  .hero h1{font-size:clamp(2.5rem,5vw,4rem);line-height:1.02;letter-spacing:-.04em;margin:0 0 20px;font-weight:900}
   .hero h1 .grad-text{background-size:200% auto;animation:sheen 6s linear infinite}
   @keyframes sheen{to{background-position:200% center}}
-  .hero p.sub{color:var(--muted);font-size:clamp(1.1rem,2.3vw,1.34rem);max-width:680px;margin:0 auto 20px;line-height:1.56}
+  .hero p.sub{color:var(--muted);font-size:clamp(1.08rem,1.5vw,1.26rem);max-width:520px;margin:0 0 24px;line-height:1.55}
+  @media(max-width:900px){.hero p.sub{margin-left:auto;margin-right:auto}}
   .hero p.sub b{color:var(--fg);font-weight:600}
-  .trust{display:flex;gap:8px 18px;justify-content:center;flex-wrap:wrap;color:var(--faint);font-size:.86rem;margin-bottom:34px}
+  .trust{display:flex;gap:8px 18px;flex-wrap:wrap;color:var(--faint);font-size:.86rem;margin:0 0 30px}
+  @media(max-width:900px){.trust{justify-content:center}}
   .trust span{display:inline-flex;align-items:center;gap:7px}
   .trust span::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--teal);opacity:.8}
-  .btns{display:flex;gap:13px;justify-content:center;flex-wrap:wrap}
+  .btns{display:flex;gap:13px;flex-wrap:wrap}
+  @media(max-width:900px){.btns{justify-content:center}}
   .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:13px;font-weight:600;font-size:1rem;
     transition:transform .16s ease, box-shadow .16s ease, border-color .16s}
   .btn.primary{background:var(--grad);color:#04121a;box-shadow:0 12px 34px -8px rgba(56,189,248,.55);font-weight:700}
@@ -126,8 +137,15 @@
   .btn.ghost:hover{transform:translateY(-2px);border-color:var(--teal)}
 
   /* terminal */
-  .term{max-width:820px;margin:60px auto 0;text-align:left;border:1px solid var(--border);
-    border-radius:16px;overflow:hidden;background:#05070c;box-shadow:0 40px 100px -34px rgba(0,0,0,.75)}
+  .term-wrap{position:relative}
+  .verdict{position:absolute;z-index:2;top:-16px;right:-6px;display:inline-flex;align-items:center;gap:8px;
+    font-family:"JetBrains Mono",monospace;font-size:.82rem;font-weight:600;color:#04121a;background:var(--grad);
+    padding:8px 14px;border-radius:999px;box-shadow:0 10px 30px -8px rgba(45,212,191,.6);animation:bob 4s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  @media(prefers-reduced-motion:reduce){.verdict{animation:none}}
+  @media(max-width:900px){.verdict{right:50%;transform:translateX(50%)}@keyframes bob{0%,100%{transform:translateX(50%)}50%{transform:translateX(50%) translateY(-6px)}}}
+  .term{margin:0;text-align:left;border:1px solid var(--border);
+    border-radius:16px;overflow:hidden;background:#05070c;box-shadow:0 40px 100px -30px rgba(56,189,248,.28), 0 30px 80px -34px rgba(0,0,0,.8)}
   @media(prefers-color-scheme:light){.term{background:#0a0e17;border-color:rgba(9,12,20,.14)}}
   .term .bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02)}
   .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
@@ -266,34 +284,40 @@
 <a id="top"></a>
 <div class="hero">
   <div class="wrap">
-    <span class="badge reveal">🛰️ <b>Report-first</b> · powered by the real Go compiler · no LLM in the loop</span>
-    <h1 class="reveal">Real Go bugs.<br><span class="grad-text">Proven, not guessed.</span></h1>
-    <p class="sub reveal">Ask an AI to "find bugs" and you get plausible suggestions you still have to verify.
-      gospect runs the <b>actual Go toolchain</b> and reports only what it can prove —
-      then hands the judgment back to you. It never rewrites your code unless you ask.</p>
-    <div class="trust reveal">
-      <span>go/analysis + SSA</span>
-      <span>Deterministic</span>
-      <span>MCP server &amp; CLI</span>
-      <span>MIT licensed</span>
-    </div>
-    <div class="btns reveal">
-      <a class="btn primary" href="#install">Get started →</a>
-      <a class="btn ghost" href="https://github.com/backendArchitect/gospect-mcp">View on GitHub</a>
-    </div>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <span class="badge reveal">🛰️ <b>Report-first</b> · powered by the real Go compiler</span>
+        <h1 class="reveal">Real Go bugs.<br><span class="grad-text">Proven, not guessed.</span></h1>
+        <p class="sub reveal">Static analysis that runs the <b>actual Go toolchain</b> and reports only what it
+          can prove — no LLM guessing. It never rewrites your code unless you ask.</p>
+        <div class="trust reveal">
+          <span>go/analysis + SSA</span>
+          <span>Deterministic</span>
+          <span>MCP server &amp; CLI</span>
+          <span>MIT</span>
+        </div>
+        <div class="btns reveal">
+          <a class="btn primary" href="#install">Get started →</a>
+          <a class="btn ghost" href="https://github.com/backendArchitect/gospect-mcp">★ Star on GitHub</a>
+        </div>
+      </div>
 
-    <div class="term reveal">
-      <div class="bar"><i></i><i></i><i></i><span>gospect-mcp scan -format text ./service</span></div>
+      <div class="term-wrap reveal">
+        <span class="verdict">✓ 6 real bugs · 0 guesses</span>
+        <div class="term">
+          <div class="bar"><i></i><i></i><i></i><span>gospect-mcp scan ./service</span></div>
 <pre><span class="c-dim">$</span> <span class="c-cmd">gospect-mcp scan <span class="c-flag">-format text</span> ./service</span>
-gospect: 6 finding(s) in ./service <span class="c-dim">(272 packages, 1 module, 2.4s)</span>
-  [<span class="c-hi">high</span>  ] nilness          <span class="c-path">handler.go:41</span>
+gospect: 6 finding(s) in ./service <span class="c-dim">(272 pkgs, 2.4s)</span>
+  [<span class="c-hi">high</span>  ] nilness      <span class="c-path">handler.go:41</span>
            nil dereference in HandleCheckout
-  [<span class="c-hi">high</span>  ] printf           <span class="c-path">report.go:88</span>
+  [<span class="c-hi">high</span>  ] printf       <span class="c-path">report.go:88</span>
            %d expects an int, but arg 1 is a string
-  [<span class="c-md">medium</span>] lostcancel       <span class="c-path">worker.go:23</span>
-           the context.CancelFunc is never called — leak
-  <span class="c-dim">… bugs sorted to the top · generated files skipped</span>
+  [<span class="c-md">medium</span>] lostcancel   <span class="c-path">worker.go:23</span>
+           context.CancelFunc is never called — leak
+  <span class="c-dim">… bugs first · generated files skipped</span>
 <span class="c-dim">$</span> <span class="c-ok">▮</span></pre>
+        </div>
+      </div>
     </div>
   </div>
 </div>
