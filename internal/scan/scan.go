@@ -68,6 +68,9 @@ type Report struct {
 // recount refreshes FindingCount and the by-category / by-severity summaries from Findings. Called
 // after the finding set changes (initial build, filtering, baseline diff).
 func (r *Report) recount() {
+	if r.Findings == nil {
+		r.Findings = []detect.Finding{} // marshal empty as [], not null, so consumers can iterate safely
+	}
 	r.FindingCount = len(r.Findings)
 	r.ByCategory = map[string]int{}
 	r.BySeverity = map[string]int{}
@@ -140,6 +143,11 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 			return nil, err
 		}
 		findings = append(findings, fs...)
+	}
+	// nil-condition (nilness's impossible/tautological-condition diagnostics) is noisy on correct
+	// code, so it's -pedantic-only — the default keeps only nilness's real nil dereferences.
+	if !opt.Pedantic {
+		findings = withoutDetectors(findings, "nil-condition")
 	}
 	modRoots := stats.Roots
 	if len(modRoots) == 0 {
