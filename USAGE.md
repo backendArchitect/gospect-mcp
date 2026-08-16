@@ -281,7 +281,7 @@ testing) are **off by default** and enabled together with **`-pedantic`**.
 
 | Flag | Adds |
 |---|---|
-| `-pedantic` | `unchecked-error` (unchecked error returns), `high-complexity` (complexity hotspots, capped at medium severity), `todo` (`TODO`/`FIXME` markers), `go-version` (outdated `go.mod` directive) |
+| `-pedantic` | `unchecked-error` (unchecked error returns), `high-complexity` (complexity hotspots, capped at medium severity), `todo` (`TODO`/`FIXME` markers), `go-version` (outdated `go.mod` directive), `misspell` (common typos in comments + function/type names — a curated known-typo list, so Go jargon like `ctx`/`mux` is never flagged; report-only) |
 | `-staticcheck` | ~100 `SA` checks from [staticcheck](https://staticcheck.dev) |
 | `-untested` | exported functions with no test |
 | `-vuln` | `govulncheck` known-CVE dependencies |

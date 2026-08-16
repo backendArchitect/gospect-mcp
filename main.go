@@ -106,7 +106,8 @@ Flags (scan, check):
   -baseline <file>    a saved report; show/gate only findings NOT already in it (adopt on noisy repos)
   -since <git-ref>    diff mode: scan only packages with .go files changed since the ref (fast PR checks)
   -pedantic           also run the opinionated hygiene heuristics (off by default, noisy on real
-                      code): unchecked-error, high-complexity, todo/fixme, outdated go.mod version
+                      code): unchecked-error, high-complexity, todo/fixme, outdated go.mod version,
+                      misspell (common typos in comments + function/type names)
   -staticcheck        also run the staticcheck SA analyzers — much deeper bug detection, but slower
   -untested           also report exported functions with no test (opt-in; noisy on large repos)
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)

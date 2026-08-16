@@ -130,6 +130,10 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 			return detect.RunStaticcheck(pkgs)
 		})
 	}
+	if opt.Pedantic {
+		// Spell-check comments + identifier names (known-typo dictionary; report-only).
+		localRuns = append(localRuns, func() ([]detect.Finding, error) { return detect.RunMisspell(pkgs) })
+	}
 	for _, run := range localRuns {
 		fs, err := run()
 		if err != nil {

@@ -3,6 +3,7 @@ module github.com/backendArchitect/gospect-mcp
 go 1.25.0
 
 require (
+	github.com/golangci/misspell v0.8.0
 	github.com/gordonklaus/ineffassign v0.2.0
 	github.com/timakin/bodyclose v0.0.0-20260723120731-857993a2939c
 	golang.org/x/mod v0.36.0
