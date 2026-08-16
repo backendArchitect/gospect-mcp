@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 ![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-gospect--mcp-2ea44f?logo=github)](https://github.com/marketplace/actions/gospect-mcp)
+[![MCP Market](https://img.shields.io/badge/MCP%20Market-gospect-6E56CF)](https://mcpmarket.com/server/gospect)
 [![CI](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/ci.yml)
 [![Release](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/backendArchitect/gospect-mcp/actions/workflows/release.yml)
 
