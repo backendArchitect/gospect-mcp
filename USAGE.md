@@ -5,6 +5,7 @@ Run `gospect-mcp help` for every command and flag at any time.
 
 - [Commands](#commands)
 - [Filtering the output](#filtering-the-output)
+- [Config file (.gospect.yml)](#config-file-gospectyml)
 - [Monorepos](#monorepos)
 - [Suppressing findings](#suppressing-findings)
 - [Baseline mode (adopt on a noisy repo)](#baseline-mode)
@@ -98,6 +99,23 @@ To silence a whole detector for one run, use `check -ignore <detector,...>`.
 
 **Generated code is skipped automatically** — files with the standard `// Code generated … DO NOT
 EDIT.` marker never contribute findings. Pass `-include-generated` to scan them anyway.
+
+## Config file (`.gospect.yml`)
+
+Set per-repo defaults once instead of repeating flags. Put a `.gospect.yml` in the directory you
+scan; **explicit CLI flags always override it.**
+
+```yaml
+# .gospect.yml
+pedantic: true       # run the hygiene heuristics by default
+staticcheck: true    # run the SA analyzers by default
+untested: false
+vuln: false
+fail-on: medium      # default gate severity for `check`
+```
+
+Suppression (path globs, per-detector) stays in [`.gospectignore`](#suppressing-findings) — this
+file is only for the behavioral toggles above.
 
 ## Baseline mode
 
