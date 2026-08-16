@@ -7,7 +7,7 @@
 <!-- Primary SEO -->
 <title>gospect-mcp — Report-First Go Code Scanner &amp; Bug Finder (MCP Server + CLI)</title>
 <meta name="description" content="gospect-mcp is a Go-only, report-first static analysis tool. It runs the real Go toolchain (go/analysis, SSA) to find genuine bugs — nil derefs, leaked contexts, unchecked errors — as an MCP server or CLI. It never edits your code by default.">
-<meta name="keywords" content="go static analysis, golang bug finder, go code scanner, go linter, MCP server, model context protocol, go security scanner, govulncheck, SARIF, go nil dereference, go monorepo linter, AI code review, claude code, cursor MCP">
+<meta name="keywords" content="go static analysis, golang bug finder, go code scanner, go linter, MCP server, model context protocol, go bug scanner mcp, mcp server for go, claude code go linter, cursor go static analysis, go static analysis for AI agents, verified auto fix go, go security scanner, govulncheck, SARIF, go nil dereference, go monorepo linter, AI code review">
 <meta name="author" content="Vatsal Chauhan">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#080a10" media="(prefers-color-scheme: dark)">
@@ -44,7 +44,50 @@
   "programmingLanguage": "Go",
   "keywords": "go static analysis, golang bug finder, MCP server, SARIF, govulncheck",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-  "author": { "@type": "Person", "name": "Vatsal Chauhan", "url": "https://github.com/backendArchitect" }
+  "author": {
+    "@type": "Person",
+    "name": "Vatsal Chauhan",
+    "url": "https://vatsalchauhan.vercel.app/",
+    "sameAs": ["https://vatsalchauhan.vercel.app/", "https://github.com/backendArchitect"]
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is gospect just another Go linter?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No — it complements go vet and golangci-lint. gospect is report-first (it never edits your code by default), it speaks MCP so AI editors like Claude Code and Cursor can call it, and on request it can apply a verified fix that rolls back on any regression. By default it reports only genuine, compiler-proven bugs." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does gospect work with Claude Code, Cursor and other AI agents?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. gospect is an MCP (Model Context Protocol) server over stdio, so any MCP client — Claude Code, Cursor, Windsurf, Cline, VS Code, Zed and more — can call it. Every scan is stateless, so you can point many agents at it at once." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does gospect modify my code?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Not by default — it is report-first. Fixing is a separate, explicit command that applies one change, re-scans, rebuilds, and rolls the change back if anything regresses. The MCP server stays read-only unless you start it with --allow-fix." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does gospect need an API key or an LLM?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. gospect is deterministic and runs the real Go toolchain (go/analysis, SSA). There is no LLM in the server and no API key — your AI agent, if any, brings the judgment." }
+    },
+    {
+      "@type": "Question",
+      "name": "How is gospect different from go vet or staticcheck?",
+      "acceptedAnswer": { "@type": "Answer", "text": "gospect runs those analyzers (and more), but adds report-first output, an MCP server for AI agents, a verified auto-fix loop, and CI integration (a PR gate, a findings comment, and SARIF). The deeper staticcheck SA checks are opt-in with -staticcheck." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can gospect fix Go bugs automatically?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes, opt-in. gospect-mcp fix applies a deterministic analyzer fix, or drives an installed AI agent, then verifies the result and rolls back on any regression. It requires a clean git tree so a rejected change reverts cleanly." }
+    }
+  ]
 }
 </script>
 
@@ -245,6 +288,17 @@
   .pillc b{color:var(--teal)}
 
   /* CTA band */
+  /* faq */
+  .faq details{border:1px solid var(--border);border-radius:12px;background:var(--panel);margin:10px 0;overflow:hidden;transition:border-color .18s}
+  .faq details[open]{border-color:var(--border-strong)}
+  .faq summary{cursor:pointer;padding:16px 20px;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:14px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";color:var(--teal);font-weight:700;font-size:1.3rem;line-height:1}
+  .faq details[open] summary::after{content:"–"}
+  .faq details[open] summary{border-bottom:1px solid var(--border)}
+  .faq details p{margin:0;padding:16px 20px;color:var(--muted);line-height:1.6;font-size:.96rem}
+  .faq details p code{color:var(--teal);font-family:"JetBrains Mono",monospace}
+
   .cta-band{border:1px solid var(--border-strong);border-radius:24px;padding:52px 34px;text-align:center;
     background:var(--grad-soft);position:relative;overflow:hidden}
   .cta-band h2{margin:0 0 12px}
@@ -276,6 +330,7 @@
       <a class="hide" href="#detects">Detects</a>
       <a class="hide" href="#install">Install</a>
       <a class="hide" href="#fix">Fix</a>
+      <a class="hide" href="#faq">FAQ</a>
       <a class="btn ghost cta" href="https://github.com/backendArchitect/gospect-mcp" style="padding:8px 16px">★ GitHub</a>
     </nav>
   </div>
@@ -518,6 +573,39 @@ gospect-mcp check -baseline base.json .             # gate only on NEW findings<
   </div>
 </section>
 
+<section id="faq">
+  <div class="wrap">
+    <p class="eyebrow reveal">FAQ</p>
+    <h2 class="reveal">Questions, answered.</h2>
+    <div class="faq reveal">
+      <details>
+        <summary>Is gospect just another Go linter?</summary>
+        <p>No — it complements <code>go vet</code> and golangci-lint. gospect is <strong>report-first</strong> (it never edits your code by default), it speaks MCP so AI editors like Claude Code and Cursor can call it, and on request it can apply a <strong>verified fix that rolls back</strong> on any regression. By default it reports only genuine, compiler-proven bugs.</p>
+      </details>
+      <details>
+        <summary>Does it work with Claude Code, Cursor and other AI agents?</summary>
+        <p>Yes. gospect is an MCP (Model Context Protocol) server over stdio, so any MCP client — Claude Code, Cursor, Windsurf, Cline, VS Code, Zed and more — can call it. Every scan is stateless, so you can point many agents at it at once.</p>
+      </details>
+      <details>
+        <summary>Does gospect modify my code?</summary>
+        <p>Not by default — it's report-first. Fixing is a separate, explicit command that applies one change, re-scans, rebuilds, and <strong>rolls the change back</strong> if anything regresses. The MCP server stays read-only unless you start it with <code>--allow-fix</code>.</p>
+      </details>
+      <details>
+        <summary>Does it need an API key or an LLM?</summary>
+        <p>No. gospect is deterministic and runs the real Go toolchain (<code>go/analysis</code>, SSA). There's no LLM in the server and no API key — your AI agent, if any, brings the judgment.</p>
+      </details>
+      <details>
+        <summary>How is it different from go vet or staticcheck?</summary>
+        <p>gospect runs those analyzers (and more), but adds report-first output, an MCP server for AI agents, a verified auto-fix loop, and CI integration (a PR gate, a findings comment, and SARIF). The deeper staticcheck SA checks are opt-in with <code>-staticcheck</code>.</p>
+      </details>
+      <details>
+        <summary>Can it fix Go bugs automatically?</summary>
+        <p>Yes, opt-in. <code>gospect-mcp fix</code> applies a deterministic analyzer fix, or drives an installed AI agent, then verifies the result and rolls back on any regression. It requires a clean git tree so a rejected change reverts cleanly.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
 <section>
   <div class="wrap">
     <div class="cta-band reveal">
@@ -540,7 +628,7 @@ gospect-mcp check -baseline base.json .             # gate only on NEW findings<
       <a href="https://github.com/backendArchitect/gospect-mcp/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a> ·
       MIT License
     </p>
-    <p class="muted" style="margin-top:8px">Built with a “deletion over addition, boring over clever” philosophy.</p>
+    <p class="muted" style="margin-top:8px">Built by <a class="grad-text" href="https://vatsalchauhan.vercel.app/">Vatsal Chauhan</a> — “deletion over addition, boring over clever.”</p>
   </div>
 </footer>
 
