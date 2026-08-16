@@ -144,10 +144,11 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		}
 		findings = append(findings, fs...)
 	}
-	// nil-condition (nilness's impossible/tautological-condition diagnostics) is noisy on correct
-	// code, so it's -pedantic-only — the default keeps only nilness's real nil dereferences.
+	// nil-condition (nilness's impossible/tautological-condition diagnostics) and shadow (variable
+	// shadowing) are noisy on correct code — go vet doesn't run shadow by default for the same
+	// reason — so they're -pedantic-only. The default keeps only nilness's real nil dereferences.
 	if !opt.Pedantic {
-		findings = withoutDetectors(findings, "nil-condition")
+		findings = withoutDetectors(findings, "nil-condition", "shadow")
 	}
 	modRoots := stats.Roots
 	if len(modRoots) == 0 {

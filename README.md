@@ -18,6 +18,8 @@ leaks, unchecked errors — and **never changes anything unless you ask**.
 Think of it as an **MRI for your Go code**: a deep, non-invasive scan that gives you a diagnosis, not
 a tool that quietly rewrites things.
 
+![gospect-mcp scanning a Go service and reporting real bugs](docs/demo.svg)
+
 🌐 **[See it in action → backendarchitect.github.io/gospect-mcp](https://backendarchitect.github.io/gospect-mcp/)**
 
 **Why people use it**
