@@ -1,0 +1,36 @@
+name: Bug report
+description: A false positive/negative, a crash, or wrong behavior
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did gospect do, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The exact command, and a minimal Go snippet if it's a false positive/negative.
+      placeholder: |
+        gospect-mcp scan -pedantic ./...
+        // the code that was (or wasn't) flagged
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: gospect version
+      description: Output of `gospect-mcp version`
+    validations:
+      required: true
+  - type: input
+    id: goversion
+    attributes:
+      label: Go version & OS
+      description: Output of `go version` and your OS/arch
+    validations:
+      required: true

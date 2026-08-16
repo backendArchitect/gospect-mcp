@@ -139,6 +139,7 @@ for every command and flag. Building from source and all distribution channels:
 - **[USAGE.md](USAGE.md)** — the full reference: every flag, monorepos, CI, filtering, staticcheck, fixing, MCP setup, and more.
 - **[Website](https://backendarchitect.github.io/gospect-mcp/)** — the quick visual tour.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — build, test, and send a change (please read the [Code of Conduct](CODE_OF_CONDUCT.md)).
+- **[CHANGELOG.md](CHANGELOG.md)** — what's changed. **[SECURITY.md](SECURITY.md)** — reporting a vulnerability.
 
 **In one line:** gospect is a report-first, Go-only code scanner — a command, a CI gate, and an MCP
 server. It reports genuine bugs backed by the real Go toolchain, and never touches your code unless
