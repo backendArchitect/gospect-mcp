@@ -27,6 +27,8 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
   corrected the previously inaccurate "Go 1.21+" claim.
 
 ### Added
+- Second-tier bug detectors (default): `waitgroup`, `deepequalerrors`,
+  `reflectvaluecompare`, `slog`, `defers`. Plus `shadow` under `-pedantic`.
 - `misspell` detector (under `-pedantic`): common typos in comments and
   function/type names, using a curated known-typo dictionary.
 - Distribution: Docker image (`ghcr.io/backendarchitect/gospect-mcp`), Homebrew

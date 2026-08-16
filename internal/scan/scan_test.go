@@ -30,12 +30,13 @@ func TestScan_Detectors(t *testing.T) {
 		"nilness", "copylocks", "lostcancel", "stub",
 		"printf", "atomic", "sortslice", "unusedresult", "stringintconv", "timeformat",
 		"sigchanyzer", "appends", "shift", "bools",
+		"waitgroup", "deepequalerrors", "reflectvaluecompare", "slog", "defers",
 	} {
 		if !got[want] {
 			t.Errorf("expected a %q finding by default; got detectors %v", want, keys(got))
 		}
 	}
-	for _, notWant := range []string{"unchecked-error", "todo", "go-version", "high-complexity", "misspell", "nil-condition"} {
+	for _, notWant := range []string{"unchecked-error", "todo", "go-version", "high-complexity", "misspell", "nil-condition", "shadow"} {
 		if got[notWant] {
 			t.Errorf("detector %q should be off by default (pedantic-only), but it fired", notWant)
 		}
@@ -53,7 +54,7 @@ func TestScan_Pedantic(t *testing.T) {
 	for _, f := range rep.Findings {
 		got[f.Detector] = true
 	}
-	for _, want := range []string{"unchecked-error", "todo", "go-version", "misspell", "nil-condition"} {
+	for _, want := range []string{"unchecked-error", "todo", "go-version", "misspell", "nil-condition", "shadow"} {
 		if !got[want] {
 			t.Errorf("expected %q under -pedantic; got %v", want, keys(got))
 		}

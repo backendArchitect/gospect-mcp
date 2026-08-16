@@ -299,7 +299,7 @@ testing) are **off by default** and enabled together with **`-pedantic`**.
 
 | Category | Detectors |
 |---|---|
-| **bug** | `nilness` (nil deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `printf` (format/arg mismatch), `atomic` (lost `sync/atomic` update), `sortslice` (non-slice to `sort.Slice`), `unusedresult` (ignored `errors.New`/`fmt.Errorf`), `stringintconv` (`string(int)`), `timeformat` (wrong time layout), `sigchanyzer` (unbuffered signal channel), `appends` (empty `append`), `shift` (over-wide shift), `bools` (redundant boolean), `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
+| **bug** | `nilness` (nil deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `printf` (format/arg mismatch), `atomic` (lost `sync/atomic` update), `sortslice` (non-slice to `sort.Slice`), `unusedresult` (ignored `errors.New`/`fmt.Errorf`), `stringintconv` (`string(int)`), `timeformat` (wrong time layout), `sigchanyzer` (unbuffered signal channel), `appends` (empty `append`), `shift` (over-wide shift), `bools` (redundant boolean), `waitgroup` (`WaitGroup.Add` in goroutine), `deepequalerrors` (`reflect.DeepEqual` on errors), `reflectvaluecompare` (`reflect.Value` compared with `==`), `slog` (mismatched `log/slog` args), `defers` (defer mistakes), `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
 | **missing** | unimplemented stubs (`panic("not implemented")`) |
 | **modernize** | `loopclosure` (pre-1.22 loop-var capture) |
 
@@ -307,7 +307,7 @@ testing) are **off by default** and enabled together with **`-pedantic`**.
 
 | Flag | Adds |
 |---|---|
-| `-pedantic` | `unchecked-error` (unchecked error returns), `high-complexity` (complexity hotspots, capped at medium severity), `todo` (`TODO`/`FIXME` markers), `go-version` (outdated `go.mod` directive), `misspell` (common typos in comments + function/type names — a curated known-typo list, so Go jargon like `ctx`/`mux` is never flagged; report-only), `nil-condition` (nilness impossible/tautological conditions — noisy on correct defensive code, so split out of the default `nilness`) |
+| `-pedantic` | `unchecked-error` (unchecked error returns), `high-complexity` (complexity hotspots, capped at medium severity), `todo` (`TODO`/`FIXME` markers), `go-version` (outdated `go.mod` directive), `misspell` (common typos in comments + function/type names — a curated known-typo list, so Go jargon like `ctx`/`mux` is never flagged; report-only), `nil-condition` (nilness impossible/tautological conditions — noisy on correct defensive code, so split out of the default `nilness`), `shadow` (variable shadowing — noisy, off in `go vet` by default too) |
 | `-staticcheck` | ~100 `SA` checks from [staticcheck](https://staticcheck.dev) |
 | `-untested` | exported functions with no test |
 | `-vuln` | `govulncheck` known-CVE dependencies |
