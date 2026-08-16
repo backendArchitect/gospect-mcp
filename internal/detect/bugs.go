@@ -1,6 +1,8 @@
 package detect
 
 import (
+	"strings"
+
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/checker"
 	"golang.org/x/tools/go/analysis/passes/appends"
@@ -44,7 +46,7 @@ var bugAnalyzers = map[*analysis.Analyzer]analyzerMeta{
 	unmarshal.Analyzer:     {"bug", "high", "high"},         // non-pointer passed to Unmarshal
 	copylock.Analyzer:      {"bug", "high", "high"},         // a value containing a lock is copied
 	errorsas.Analyzer:      {"bug", "high", "high"},         // errors.As target is not a pointer to an error
-	bodyclose.Analyzer:     {"bug", "high", "high"},         // HTTP response body never closed -> leak
+	bodyclose.Analyzer:     {"bug", "high", "medium"},       // HTTP body not closed -> leak (heuristic: FPs on hijacked conns, e.g. net/rpc CONNECT)
 	printf.Analyzer:        {"bug", "high", "high"},         // Printf format/argument mismatch or non-constant format
 	atomic.Analyzer:        {"bug", "high", "high"},         // sync/atomic result assigned back (lost update)
 	sortslice.Analyzer:     {"bug", "high", "high"},         // sort.Slice on a non-slice -> runtime panic
@@ -83,11 +85,19 @@ func RunBugDetectors(pkgs []*packages.Package) ([]Finding, error) {
 		}
 		for _, d := range act.Diagnostics {
 			pos := act.Package.Fset.Position(d.Pos)
+			detector, sev, conf := act.Analyzer.Name, meta.severity, meta.confidence
+			// nilness emits two kinds: a nil *dereference* (a real crash — keep it a default
+			// high bug) and an *impossible/tautological condition* (e.g. "nil != nil"). The latter
+			// misfires on correct defensive code — it flagged heavily-reviewed go/types as buggy in
+			// the real-world shakedown — so split it into its own low, -pedantic-only detector.
+			if act.Analyzer == nilness.Analyzer && !strings.Contains(d.Message, "dereference") {
+				detector, sev, conf = "nil-condition", "low", "medium"
+			}
 			findings = append(findings, Finding{
 				Category:   meta.category,
-				Detector:   act.Analyzer.Name,
-				Severity:   meta.severity,
-				Confidence: meta.confidence,
+				Detector:   detector,
+				Severity:   sev,
+				Confidence: conf,
 				File:       pos.Filename,
 				Line:       pos.Line,
 				Col:        pos.Column,
