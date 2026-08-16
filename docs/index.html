@@ -189,6 +189,8 @@
   @media(max-width:900px){.verdict{right:50%;transform:translateX(50%)}@keyframes bob{0%,100%{transform:translateX(50%)}50%{transform:translateX(50%) translateY(-6px)}}}
   .term{margin:0;text-align:left;border:1px solid var(--border);
     border-radius:16px;overflow:hidden;background:#05070c;box-shadow:0 40px 100px -30px rgba(56,189,248,.28), 0 30px 80px -34px rgba(0,0,0,.8)}
+  .term-img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:16px;
+    box-shadow:0 40px 100px -30px rgba(56,189,248,.28), 0 30px 80px -34px rgba(0,0,0,.8)}
   @media(prefers-color-scheme:light){.term{background:#0a0e17;border-color:rgba(9,12,20,.14)}}
   .term .bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02)}
   .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
@@ -359,19 +361,8 @@
 
       <div class="term-wrap reveal">
         <span class="verdict">✓ 6 real bugs · 0 guesses</span>
-        <div class="term">
-          <div class="bar"><i></i><i></i><i></i><span>gospect-mcp scan ./service</span></div>
-<pre><span class="c-dim">$</span> <span class="c-cmd">gospect-mcp scan <span class="c-flag">-format text</span> ./service</span>
-gospect: 6 finding(s) in ./service <span class="c-dim">(272 pkgs, 2.4s)</span>
-  [<span class="c-hi">high</span>  ] nilness      <span class="c-path">handler.go:41</span>
-           nil dereference in HandleCheckout
-  [<span class="c-hi">high</span>  ] printf       <span class="c-path">report.go:88</span>
-           %d expects an int, but arg 1 is a string
-  [<span class="c-md">medium</span>] lostcancel   <span class="c-path">worker.go:23</span>
-           context.CancelFunc is never called — leak
-  <span class="c-dim">… bugs first · generated files skipped</span>
-<span class="c-dim">$</span> <span class="c-ok">▮</span></pre>
-        </div>
+        <img class="term-img" src="demo.svg" width="760" height="344" loading="lazy"
+             alt="gospect-mcp scanning a Go service and reporting real bugs — nil dereference, printf mismatch, leaked context">
       </div>
     </div>
   </div>

@@ -31,6 +31,8 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
   `reflectvaluecompare`, `slog`, `defers`. Plus `shadow` under `-pedantic`.
 - `misspell` detector (under `-pedantic`): common typos in comments and
   function/type names, using a curated known-typo dictionary.
+- Animated terminal demo (`docs/demo.svg`) in the README and site hero —
+  self-contained SVG, no external host, with a reduced-motion static fallback.
 - Distribution: Docker image (`ghcr.io/backendarchitect/gospect-mcp`), Homebrew
   formula, and a `pre-commit` hook.
 - CI: a `check` GitHub Action that gates PRs, posts a findings comment, and

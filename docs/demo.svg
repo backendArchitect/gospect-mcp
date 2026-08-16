@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 344" width="760" height="344" font-family="ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace" role="img" aria-label="gospect-mcp scanning a Go service and reporting bugs">
+  <title>gospect-mcp — scanning a Go service, reporting real bugs</title>
+  <style>
+    .win  { fill:#0b0f17; }
+    .bar  { fill:#11161f; }
+    .txt  { font-size:15px; }
+    .cmd  { fill:#eaf0f8; } .dim { fill:#68748a; } .flag { fill:#38bdf8; }
+    .path { fill:#a78bfa; } .hi { fill:#ff6b6b; font-weight:600; } .md { fill:#fbbf24; } .ok { fill:#2dd4bf; }
+    g.step { opacity:0; }
+    g#g1 { animation: s 12s infinite; }
+    g#g2 { animation: s 12s infinite; animation-delay:.6s; }
+    g#g3 { animation: s 12s infinite; animation-delay:1.4s; }
+    g#g4 { animation: s 12s infinite; animation-delay:2.2s; }
+    g#g5 { animation: s 12s infinite; animation-delay:3.0s; }
+    g#g6 { animation: s 12s infinite; animation-delay:3.8s; }
+    @keyframes s { 0%{opacity:0} 4%{opacity:1} 88%{opacity:1} 94%{opacity:0} 100%{opacity:0} }
+    .cursor { fill:#2dd4bf; animation: bl 1s steps(1) infinite; }
+    @keyframes bl { 50%{opacity:0} }
+    @media (prefers-reduced-motion: reduce) { g.step{opacity:1} .cursor{animation:none} }
+  </style>
+
+  <rect class="win" x="1" y="1" width="758" height="342" rx="14"/>
+  <rect class="bar" x="1" y="1" width="758" height="34" rx="14"/>
+  <rect class="bar" x="1" y="18" width="758" height="17"/>
+  <circle cx="24" cy="18" r="6" fill="#ff5f57"/>
+  <circle cx="44" cy="18" r="6" fill="#febc2e"/>
+  <circle cx="64" cy="18" r="6" fill="#28c840"/>
+  <text x="92" y="23" class="txt dim">gospect-mcp scan ./service</text>
+
+  <g id="g1" class="step"><text x="22" y="66" class="txt"><tspan class="dim">$</tspan> <tspan class="cmd">gospect-mcp scan </tspan><tspan class="flag">-format text</tspan><tspan class="cmd"> ./service</tspan></text></g>
+  <g id="g2" class="step"><text x="22" y="92" class="txt cmd">gospect: 6 finding(s) in ./service <tspan class="dim">(272 pkgs, 2.4s)</tspan></text></g>
+  <g id="g3" class="step">
+    <text x="22" y="126" class="txt cmd">  [<tspan class="hi">high</tspan>  ] nilness      <tspan class="path">handler.go:41</tspan></text>
+    <text x="22" y="148" class="txt dim">           nil dereference in HandleCheckout</text>
+  </g>
+  <g id="g4" class="step">
+    <text x="22" y="182" class="txt cmd">  [<tspan class="hi">high</tspan>  ] printf       <tspan class="path">report.go:88</tspan></text>
+    <text x="22" y="204" class="txt dim">           %d expects an int, but arg 1 is a string</text>
+  </g>
+  <g id="g5" class="step">
+    <text x="22" y="238" class="txt cmd">  [<tspan class="md">medium</tspan>] lostcancel   <tspan class="path">worker.go:23</tspan></text>
+    <text x="22" y="260" class="txt dim">           context.CancelFunc is never called — leak</text>
+  </g>
+  <g id="g6" class="step">
+    <text x="22" y="296" class="txt ok">  ✓ bugs first · generated files skipped · 0 guesses</text>
+    <text x="22" y="322" class="txt"><tspan class="dim">$</tspan> <tspan class="cursor">▮</tspan></text>
+  </g>
+</svg>
