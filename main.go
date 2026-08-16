@@ -113,7 +113,7 @@ Flags (scan, check):
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
   -include-generated  also report findings in generated ("DO NOT EDIT") files (skipped by default)
 Flags (scan):
-  -format <fmt>       json|text|sarif (default json; sarif = GitHub code-scanning)
+  -format <fmt>       json|text|md|sarif (default json; md = PR comment/summary; sarif = code-scanning)
   -exit-code          exit 1 if any findings remain (after filters/baseline)
 Flags (check):
   -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
@@ -146,7 +146,7 @@ func runScan() {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	verbose := fs.Bool("verbose", true, "stream load/detector progress and a summary to stderr (on by default)")
 	quiet := fs.Bool("quiet", false, "silence all progress on stderr (JSON on stdout is unaffected)")
-	format := fs.String("format", "json", "output format: json|text|sarif")
+	format := fs.String("format", "json", "output format: json|text|md|sarif")
 	baseline := fs.String("baseline", "", "path to a saved report; show only findings NOT already in it")
 	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
@@ -194,6 +194,8 @@ func runScan() {
 	switch *format {
 	case "text":
 		printFindingsText(rep)
+	case "md", "markdown":
+		printFindingsMarkdown(rep)
 	case "sarif":
 		out, _ := json.MarshalIndent(rep.SARIF(selfupdate.Current()), "", "  ")
 		fmt.Println(string(out))
@@ -414,6 +416,35 @@ func printFindingsText(rep *scan.Report) {
 			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
 		}
 		fmt.Printf("  [%-6s] %-16s %s\n           %s\n", f.Severity, f.Detector, loc, f.Message)
+	}
+}
+
+// printFindingsMarkdown renders a GitHub-flavored findings table (bugs first) — drop it straight
+// into a PR comment or $GITHUB_STEP_SUMMARY, so CI needn't hand-roll the same markdown.
+func printFindingsMarkdown(rep *scan.Report) {
+	emoji := map[string]string{"high": "🔴", "medium": "🟠", "low": "🟡"}
+	fmt.Println("## 🩺 gospect findings")
+	fmt.Println()
+	if rep.FindingCount == 0 {
+		fmt.Println("✅ **No findings.** This module is clean.")
+		return
+	}
+	var chips []string
+	for _, s := range []string{"high", "medium", "low"} {
+		if n := rep.BySeverity[s]; n > 0 {
+			chips = append(chips, fmt.Sprintf("%s %d %s", emoji[s], n, s))
+		}
+	}
+	fmt.Printf("**%d** finding(s) — %s\n\n", rep.FindingCount, strings.Join(chips, " · "))
+	fmt.Println("| | severity | detector | location | message |")
+	fmt.Println("|---|---|---|---|---|")
+	for _, f := range rep.Findings {
+		loc := filepath.Base(f.File)
+		if f.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", filepath.Base(f.File), f.Line)
+		}
+		msg := strings.ReplaceAll(f.Message, "|", "\\|")
+		fmt.Printf("| %s | %s | `%s` | `%s` | %s |\n", emoji[f.Severity], f.Severity, f.Detector, loc, msg)
 	}
 }
 

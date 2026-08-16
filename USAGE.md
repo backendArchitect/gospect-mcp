@@ -55,7 +55,7 @@ gospect-mcp scan -exclude '*.pb.go,mocks/' .         # skip generated code / moc
 - `-min-confidence low|medium|high` — drop low-confidence heuristics.
 - `-category a,b` / `-detector a,b` — keep only those categories/detectors.
 - `-exclude glob,glob` — drop findings whose file path matches a glob or substring.
-- `-format text` — a readable grouped listing instead of JSON.
+- `-format text|md|sarif` — readable text, a Markdown table (PR comment/step summary), or SARIF.
 
 ## Monorepos
 

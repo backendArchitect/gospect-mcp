@@ -65,37 +65,17 @@ runs:
         category: ${{ inputs.sarif-category }}
 
     # PR comment (rendered + posted BEFORE the gate, so it appears even when the gate fails).
+    # gospect renders the markdown itself (-format md); the shell just adds the sticky-comment marker.
     - name: gospect scan (render PR comment)
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
       shell: bash
-      env:
-        IGNORE: ${{ inputs.ignore }}   # scan has no -ignore flag; filter these detectors below
       run: |
-        gospect-mcp scan -format json "${{ inputs.path }}" ${{ inputs.patterns }} > gospect.json
-        python3 - <<'PY' > gospect-comment.md
-        import json, os
-        r = json.load(open("gospect.json"))
-        ignore = {d.strip() for d in os.environ.get("IGNORE", "").split(",") if d.strip()}
-        findings = [f for f in r["findings"] if f["detector"] not in ignore]  # keep gospect's bugs-first order
-        emoji = {"high": "🔴", "medium": "🟠", "low": "🟡"}
-        bysev = {}
-        for f in findings:
-            bysev[f["severity"]] = bysev.get(f["severity"], 0) + 1
-        L = ["<!-- gospect-report -->", "## 🩺 gospect findings", ""]
-        if not findings:
-            L.append("✅ **No findings.** This module is clean.")
-        else:
-            chips = " · ".join(f'{emoji.get(s,"")} {bysev[s]} {s}' for s in ("high", "medium", "low") if s in bysev)
-            L += [f"**{len(findings)}** finding(s) — {chips}", "",
-                  "| | severity | detector | location | message |",
-                  "|---|---|---|---|---|"]
-            for f in findings:
-                loc = f["file"].split("/")[-1] + ":" + str(f["line"])
-                msg = f["message"].replace("|", "\\|")[:100]
-                L.append(f'| {emoji.get(f["severity"],"")} | {f["severity"]} | `{f["detector"]}` | `{loc}` | {msg} |')
-        L += ["", "<sub>Posted by the gospect GitHub Action. Bugs are listed first.</sub>"]
-        open("gospect-comment.md", "w").write("\n".join(L))
-        PY
+        {
+          echo '<!-- gospect-report -->'
+          gospect-mcp scan -format md "${{ inputs.path }}" ${{ inputs.patterns }}
+          echo ''
+          echo '<sub>Posted by the gospect GitHub Action.</sub>'
+        } > gospect-comment.md
     - name: Post / update the gospect PR comment
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7

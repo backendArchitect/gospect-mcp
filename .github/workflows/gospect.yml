@@ -27,32 +27,12 @@ jobs:
 
       - name: Scan and render a findings report
         run: |
-          ./gospect-mcp scan -quiet -staticcheck -exclude testdata . ./... > findings.json
-          python3 - <<'PY' > findings.md
-          import json
-          r = json.load(open("findings.json"))
-          n = r["finding_count"]
-          emoji = {"high": "🔴", "medium": "🟠", "low": "🟡"}
-          lines = ["<!-- gospect-report -->", "## 🩺 gospect findings", ""]
-          if n == 0:
-              lines.append("✅ **No findings.** This module is clean.")
-          else:
-              bysev = r.get("by_severity") or {}
-              chips = " · ".join(f'{emoji.get(s,"")} {c} {s}' for s, c in bysev.items())
-              lines.append(f"**{n}** finding(s) — {chips}")
-              lines.append("")
-              lines.append("| | severity | detector | location | message |")
-              lines.append("|---|---|---|---|---|")
-              for f in r["findings"]:
-                  loc = f["file"].split("/")[-1] + ":" + str(f["line"])
-                  msg = f["message"].replace("|", "\\|")[:100]
-                  lines.append(f'| {emoji.get(f["severity"],"")} | {f["severity"]} | `{f["detector"]}` | `{loc}` | {msg} |')
-              lines.append("")
-              lines.append("_Bugs are listed first. The job fails only on **high**-severity findings._")
-          lines.append("")
-          lines.append("<sub>Posted by gospect, built from this branch. testdata/ (deliberate bugs) is excluded.</sub>")
-          open("findings.md", "w").write("\n".join(lines))
-          PY
+          {
+            echo '<!-- gospect-report -->'
+            ./gospect-mcp scan -quiet -format md -staticcheck -exclude testdata . ./...
+            echo ''
+            echo '_Bugs first. The job fails only on **high**-severity findings. testdata/ excluded._'
+          } > findings.md
           cat findings.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post / update the findings comment on the PR
