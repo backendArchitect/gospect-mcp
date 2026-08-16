@@ -265,15 +265,28 @@ findings are still returned.
 
 Every finding carries `category`, `detector`, `severity`, `confidence`, `file:line`, and `message`.
 
+**The default run is deliberately high-signal — genuine bugs (plus `stub`) only.** The opinionated
+hygiene heuristics that fire on clean code (they produced ~99% of the findings on the Go stdlib in
+testing) are **off by default** and enabled together with **`-pedantic`**.
+
+### Default (always on)
+
 | Category | Detectors |
 |---|---|
 | **bug** | `nilness` (nil deref), `lostcancel` (leaked `context.CancelFunc`), `bodyclose` (unclosed HTTP body), `httpresponse`, `unmarshal`, `copylock`, `errorsas`, `printf` (format/arg mismatch), `atomic` (lost `sync/atomic` update), `sortslice` (non-slice to `sort.Slice`), `unusedresult` (ignored `errors.New`/`fmt.Errorf`), `stringintconv` (`string(int)`), `timeformat` (wrong time layout), `sigchanyzer` (unbuffered signal channel), `appends` (empty `append`), `shift` (over-wide shift), `bools` (redundant boolean), `nilfunc`, `unreachable`, `ineffassign` (dead assignment) |
-| **missing** | unimplemented stubs (`panic("not implemented")`), `TODO`/`FIXME`, unchecked error returns |
-| **modernize** | outdated `go.mod` go directive, `loopclosure` (pre-1.22 loop-var capture) |
-| **over-engineered** | `high-complexity` — functions past conservative complexity thresholds |
+| **missing** | unimplemented stubs (`panic("not implemented")`) |
+| **modernize** | `loopclosure` (pre-1.22 loop-var capture) |
 
-The default set is built entirely on `golang.org/x/tools`. Add `-staticcheck` for ~100 more `SA`
-checks and `-untested` for untested exports.
+### Opt-in
+
+| Flag | Adds |
+|---|---|
+| `-pedantic` | `unchecked-error` (unchecked error returns), `high-complexity` (complexity hotspots, capped at medium severity), `todo` (`TODO`/`FIXME` markers), `go-version` (outdated `go.mod` directive) |
+| `-staticcheck` | ~100 `SA` checks from [staticcheck](https://staticcheck.dev) |
+| `-untested` | exported functions with no test |
+| `-vuln` | `govulncheck` known-CVE dependencies |
+
+The default set is built entirely on `golang.org/x/tools`.
 
 ## The `scan` tool
 

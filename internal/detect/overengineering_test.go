@@ -19,7 +19,7 @@ func TestRunOverEngineering(t *testing.T) {
 	if len(fs) != 2 {
 		t.Fatalf("want 2 findings, got %d", len(fs))
 	}
-	// Gnarly is >= 2x thresholds -> high; Meh is over one threshold but below 2x -> medium.
+	// high-complexity caps at medium — it's a design opinion, never bug-grade (real-world tuning).
 	got := map[string]string{}
 	for _, f := range fs {
 		if f.Category != "over-engineered" || f.Detector != "high-complexity" {
@@ -27,7 +27,7 @@ func TestRunOverEngineering(t *testing.T) {
 		}
 		got[f.Package] = f.Severity
 	}
-	if got["pkg.Gnarly"] != "high" || got["pkg.Meh"] != "medium" {
+	if got["pkg.Gnarly"] != "medium" || got["pkg.Meh"] != "medium" {
 		t.Fatalf("unexpected severities: %v", got)
 	}
 }

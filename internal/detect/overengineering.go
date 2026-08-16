@@ -16,14 +16,12 @@ func RunOverEngineering(ctx context.Context, g graph.Graph, scope string, minCyc
 	}
 	findings := make([]Finding, 0, len(spots))
 	for _, h := range spots {
-		sev := "medium"
-		if h.Cyclomatic >= 2*minCyclomatic || h.Cognitive >= 2*minCognitive {
-			sev = "high"
-		}
+		// High complexity is a design opinion, not a defect — it caps at "medium" so it can never
+		// dominate a `-fail-on high` gate or the high-severity view (see the real-world tuning).
 		findings = append(findings, Finding{
 			Category:   "over-engineered",
 			Detector:   "high-complexity",
-			Severity:   sev,
+			Severity:   "medium",
 			Confidence: "medium",
 			File:       h.File,
 			Line:       h.Line,

@@ -50,7 +50,7 @@ jobs:
 
       - name: Regression guard — every planted detector must fire
         run: |
-          json=$(./gospect-mcp scan -quiet -staticcheck testdata/buggy ./...)
+          json=$(./gospect-mcp scan -quiet -staticcheck -pedantic testdata/buggy ./...)
           for d in nilness copylocks lostcancel printf atomic sortslice timeformat stub unchecked-error todo go-version SA1006; do
             echo "$json" | grep -q "\"$d\"" || { echo "::error::detector $d did not fire on testdata/buggy"; exit 1; }
             echo "ok: $d"

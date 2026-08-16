@@ -50,10 +50,15 @@ no setup, no changes to your code.
 
 ## What it finds
 
-- 🐞 **Bugs that crash or leak** — nil pointer dereferences, forgotten `context` cancels, unclosed HTTP bodies, `Printf` format mistakes, and ~15 more.
-- 🚧 **Unfinished work** — `panic("not implemented")` stubs, `TODO`/`FIXME` markers, ignored errors.
-- 🕸️ **Stale things** — an outdated `go.mod`, API docs that no longer match the code.
-- 🧶 **Over-complex code** — functions too tangled to be safe.
+**By default, only genuine bugs** — the kind that crash or leak:
+
+- 🐞 nil pointer dereferences, forgotten `context` cancels, unclosed HTTP bodies, `Printf`
+  format mistakes, lost `sync/atomic` updates, `sort.Slice` misuse, and ~15 more — plus
+  `panic("not implemented")` stubs.
+
+That's deliberate: run it on real code and you get a short list of real problems, not hundreds of
+style nits. Want the opinionated hygiene checks too — unchecked errors, TODOs, complexity hotspots,
+an outdated `go.mod`? Add **`-pedantic`**. Go even deeper with **`-staticcheck`** (~100 more checks).
 
 Everything is ranked by severity (bugs first). The [full detector list is here →](USAGE.md#what-it-detects-full-list)
 

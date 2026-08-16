@@ -105,6 +105,8 @@ Flags (scan, check):
   -exclude <g,g>      drop findings whose file path matches a glob/substring (e.g. *.pb.go,mocks/)
   -baseline <file>    a saved report; show/gate only findings NOT already in it (adopt on noisy repos)
   -since <git-ref>    diff mode: scan only packages with .go files changed since the ref (fast PR checks)
+  -pedantic           also run the opinionated hygiene heuristics (off by default, noisy on real
+                      code): unchecked-error, high-complexity, todo/fixme, outdated go.mod version
   -staticcheck        also run the staticcheck SA analyzers — much deeper bug detection, but slower
   -untested           also report exported functions with no test (opt-in; noisy on large repos)
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
@@ -150,6 +152,7 @@ func runScan() {
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
 	staticcheck := fs.Bool("staticcheck", false, "also run staticcheck SA analyzers (much deeper, but slower)")
 	untested := fs.Bool("untested", false, "also report exported functions with no test (noisy on large repos)")
+	pedantic := fs.Bool("pedantic", false, "also run the opinionated hygiene heuristics: unchecked-error, high-complexity, todo, go-version")
 	since := fs.String("since", "", "diff mode: scan only packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
 	args := parseArgs(fs)
@@ -173,7 +176,7 @@ func runScan() {
 	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
 		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(show),
-		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, Untested: *untested,
+		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, Untested: *untested, Pedantic: *pedantic,
 		DiffMode: diffMode, ChangedFiles: changed,
 	})
 	if err != nil {
@@ -215,6 +218,7 @@ func runFix() {
 	dryRun := fs.Bool("dry-run", false, "print the fix prompt(s) only; don't invoke the agent or edit code")
 	staticcheck := fs.Bool("staticcheck", false, "include staticcheck findings as fix candidates")
 	untested := fs.Bool("untested", false, "include untested-export findings as fix candidates")
+	pedantic := fs.Bool("pedantic", false, "include the pedantic heuristics (unchecked-error, todo, …) as fix candidates")
 	quiet := fs.Bool("quiet", false, "silence progress on stderr")
 	filter := addFilterFlags(fs)
 	args := parseArgs(fs)
@@ -246,7 +250,7 @@ func runFix() {
 		fmt.Fprintf(os.Stderr, "gospect: scanning %s for a finding to fix…\n", dir)
 	}
 	rep, err := scan.ScanWithOptions(dir, scan.Options{
-		Patterns: args[1:], Staticcheck: *staticcheck, Untested: *untested, Progress: progressFn(show),
+		Patterns: args[1:], Staticcheck: *staticcheck, Untested: *untested, Pedantic: *pedantic, Progress: progressFn(show),
 	})
 	if err != nil {
 		exitScanError(err)
@@ -702,6 +706,7 @@ func runCheck() {
 	inclGen := fs.Bool("include-generated", false, "also report findings in generated (\"DO NOT EDIT\") files")
 	staticcheck := fs.Bool("staticcheck", false, "also run staticcheck SA analyzers (much deeper, but slower)")
 	untested := fs.Bool("untested", false, "also report exported functions with no test (noisy on large repos)")
+	pedantic := fs.Bool("pedantic", false, "also run the opinionated hygiene heuristics: unchecked-error, high-complexity, todo, go-version")
 	since := fs.String("since", "", "diff mode: gate only on packages with .go files changed since this git ref (e.g. origin/main)")
 	filter := addFilterFlags(fs)
 	args := parseArgs(fs)
@@ -722,7 +727,7 @@ func runCheck() {
 	}
 	rep, err := scan.ScanWithOptions(args[0], scan.Options{
 		Patterns: args[1:], Graph: g, GraphScope: scope, Progress: progressFn(show),
-		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, Untested: *untested,
+		Vuln: *vuln, IncludeGenerated: *inclGen, Staticcheck: *staticcheck, Untested: *untested, Pedantic: *pedantic,
 		DiffMode: diffMode, ChangedFiles: changed,
 	})
 	if err != nil {

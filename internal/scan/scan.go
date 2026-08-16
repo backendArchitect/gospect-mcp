@@ -37,6 +37,7 @@ type Options struct {
 	IncludeGenerated bool // scan generated files too (default: findings in "DO NOT EDIT" files are dropped)
 	Staticcheck      bool // also run the staticcheck SA analyzers (opt-in: much deeper, but slower)
 	Untested         bool // also report exported functions with no test (opt-in: noisy on large repos)
+	Pedantic         bool // also run the opinionated/hygiene heuristics (opt-in: noisy on real code)
 
 	// Diff mode: when DiffMode is set, only the packages containing ChangedFiles are loaded and
 	// scanned (fast PR checks). An empty ChangedFiles list yields an empty report.
@@ -112,7 +113,16 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 	// rather than returning a partial, misleading "all clear".
 	localRuns := []func() ([]detect.Finding, error){
 		func() ([]detect.Finding, error) { return detect.RunBugDetectors(pkgs) },
-		func() ([]detect.Finding, error) { return detect.RunMissingCode(pkgs) },
+		// RunMissingCode emits stub + todo + unchecked-error. Only `stub` is high-signal on real
+		// code; todo and unchecked-error are noisy (unchecked-error fired ~193× on net/http alone),
+		// so they're gated behind -pedantic. Bugs stay the default.
+		func() ([]detect.Finding, error) {
+			fs, err := detect.RunMissingCode(pkgs)
+			if err != nil || opt.Pedantic {
+				return fs, err
+			}
+			return withoutDetectors(fs, "todo", "unchecked-error"), nil
+		},
 	}
 	if opt.Staticcheck {
 		localRuns = append(localRuns, func() ([]detect.Finding, error) {
@@ -127,18 +137,20 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		}
 		findings = append(findings, fs...)
 	}
-	// Modernize reads each module's go.mod, so it runs once per loaded module root
-	// (a monorepo has several); fall back to dir when the loader reported none.
 	modRoots := stats.Roots
 	if len(modRoots) == 0 {
 		modRoots = []string{dir}
 	}
-	for _, root := range modRoots {
-		fs, err := detect.RunModernize(root)
-		if err != nil {
-			return nil, err
+	// Modernize emits only `go-version` (an outdated go.mod directive) — it fires on nearly every
+	// real project, so it's -pedantic-only. It reads each module's go.mod (a monorepo has several).
+	if opt.Pedantic {
+		for _, root := range modRoots {
+			fs, err := detect.RunModernize(root)
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, fs...)
 		}
-		findings = append(findings, fs...)
 	}
 	// Vulnerability scan is opt-in (slow, needs the vuln DB); off by default.
 	if opt.Vuln {
@@ -172,11 +184,13 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		} else {
 			progress("running graph-backed detectors…")
 		}
-		// Over-engineering (complexity hotspots) is bounded and high-signal, so it runs by default.
-		graphRuns := []func() ([]detect.Finding, error){
-			func() ([]detect.Finding, error) {
+		// Over-engineering (complexity hotspots) is a design opinion, not a defect, and fires on
+		// inherently-complex-but-fine code (e.g. ~29× on net/http), so it's -pedantic-only.
+		var graphRuns []func() ([]detect.Finding, error)
+		if opt.Pedantic {
+			graphRuns = append(graphRuns, func() ([]detect.Finding, error) {
 				return detect.RunOverEngineering(ctx, g, scope, defaultMinCyclomatic, defaultMinCognitive)
-			},
+			})
 		}
 		// Untested-exports is opt-in: the built-in name heuristic is noisy on large repos (misses
 		// cross-package tests). An external graph's TESTS edges are accurate, so run it there too.
@@ -255,6 +269,22 @@ func fingerprint(dir string, f detect.Finding) string {
 	h := fnv.New64a()
 	fmt.Fprintf(h, "%s\x00%s\x00%s", f.Detector, filepath.ToSlash(rel), f.Message)
 	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+// withoutDetectors returns fs minus any finding whose detector is in drop. Used to keep the default
+// scan high-signal by excluding the -pedantic-only heuristics.
+func withoutDetectors(fs []detect.Finding, drop ...string) []detect.Finding {
+	skip := make(map[string]bool, len(drop))
+	for _, d := range drop {
+		skip[d] = true
+	}
+	out := fs[:0]
+	for _, f := range fs {
+		if !skip[f.Detector] {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // sortFindings orders the report by importance so the most actionable issues are on top: highest

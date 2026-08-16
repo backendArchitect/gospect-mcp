@@ -24,16 +24,48 @@ func TestScan_Detectors(t *testing.T) {
 		got[f.Detector] = true
 	}
 
-	// One per detector we've implemented; testdata/buggy contains a case for each.
+	// The DEFAULT set is high-signal only: bug analyzers + stub. It must NOT include the pedantic
+	// heuristics (they're noisy on real code — see the real-world tuning).
 	for _, want := range []string{
-		"nilness", "copylocks", "lostcancel", "stub", "unchecked-error", "todo", "go-version",
+		"nilness", "copylocks", "lostcancel", "stub",
 		"printf", "atomic", "sortslice", "unusedresult", "stringintconv", "timeformat",
 		"sigchanyzer", "appends", "shift", "bools",
 	} {
 		if !got[want] {
-			t.Errorf("expected a %q finding; got detectors %v (findings: %+v)", want, got, rep.Findings)
+			t.Errorf("expected a %q finding by default; got detectors %v", want, keys(got))
 		}
 	}
+	for _, notWant := range []string{"unchecked-error", "todo", "go-version", "high-complexity"} {
+		if got[notWant] {
+			t.Errorf("detector %q should be off by default (pedantic-only), but it fired", notWant)
+		}
+	}
+}
+
+// TestScan_Pedantic proves the -pedantic heuristics are added on opt-in and absent by default.
+func TestScan_Pedantic(t *testing.T) {
+	dir := filepath.Join("..", "..", "testdata", "buggy")
+	rep, err := ScanWithOptions(dir, Options{Patterns: []string{"./..."}, Pedantic: true})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range rep.Findings {
+		got[f.Detector] = true
+	}
+	for _, want := range []string{"unchecked-error", "todo", "go-version"} {
+		if !got[want] {
+			t.Errorf("expected %q under -pedantic; got %v", want, keys(got))
+		}
+	}
+}
+
+func keys(m map[string]bool) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // TestScan_Staticcheck verifies the opt-in staticcheck pass adds SA-prefixed findings that the

@@ -83,7 +83,10 @@ func Fix(ctx context.Context, dir string, o Options) (*Result, error) {
 	prompt := buildPrompt(fix.Build(f))
 
 	// Reproduce the finding (scoped to its package) and snapshot the baseline finding set.
-	scanOpts := scan.Options{DiffMode: true, ChangedFiles: []string{file}, Staticcheck: true, Untested: true}
+	// The fixer reproduces a SPECIFIC finding the caller chose, so it scans with everything on
+	// (staticcheck + untested + pedantic) — otherwise a targeted todo/unchecked-error fix couldn't
+	// find its own finding now that those are off by default.
+	scanOpts := scan.Options{DiffMode: true, ChangedFiles: []string{file}, Staticcheck: true, Untested: true, Pedantic: true}
 	before, err := scan.ScanWithOptions(root, scanOpts)
 	if err != nil {
 		return nil, fmt.Errorf("baseline scan failed: %w", err)
