@@ -22,8 +22,25 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+  # Gate the release on the same end-to-end dogfood the PR runs, so a regression can't reach a
+  # release even when it lands straight on main.
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go build -o gospect-mcp .
+      - name: The fixture's high-severity bugs must fail the gate
+        run: |
+          set +e; ./gospect-mcp check -quiet -fail-on high testdata/buggy ./...; code=$?; set -e
+          [ "$code" -eq 1 ] || { echo "::error::expected exit 1 on testdata/buggy, got $code"; exit 1; }
+      - name: gospect must stay clean on its own source
+        run: ./gospect-mcp check -quiet -fail-on high -exclude testdata . ./...
+
   tag:
-    needs: test
+    needs: [test, selftest]
     if: "!contains(github.event.head_commit.message, '[skip release]')"
     runs-on: ubuntu-latest
     outputs:

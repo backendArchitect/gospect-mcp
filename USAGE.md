@@ -5,6 +5,7 @@ Run `gospect-mcp help` for every command and flag at any time.
 
 - [Commands](#commands)
 - [Filtering the output](#filtering-the-output)
+- [Config file (.gospect.yml)](#config-file-gospectyml)
 - [Monorepos](#monorepos)
 - [Suppressing findings](#suppressing-findings)
 - [Baseline mode (adopt on a noisy repo)](#baseline-mode)
@@ -55,7 +56,7 @@ gospect-mcp scan -exclude '*.pb.go,mocks/' .         # skip generated code / moc
 - `-min-confidence low|medium|high` — drop low-confidence heuristics.
 - `-category a,b` / `-detector a,b` — keep only those categories/detectors.
 - `-exclude glob,glob` — drop findings whose file path matches a glob or substring.
-- `-format text` — a readable grouped listing instead of JSON.
+- `-format text|md|sarif` — readable text, a Markdown table (PR comment/step summary), or SARIF.
 
 ## Monorepos
 
@@ -68,6 +69,10 @@ gospect-mcp scan ./my-monorepo
 Multi-module discovery kicks in only for the default `./...` pattern. If a module can't be loaded
 (stale vendoring, a private dependency), it's **skipped with a reason** on stderr and listed in the
 report's `skipped_modules` — the rest still scan. A partial scan never masquerades as full coverage.
+
+**Go workspaces (`go.work`).** If the directory has a `go.work`, gospect scans exactly its `use`
+modules (cross-module workspace imports resolve correctly, and a stray nested `go.mod` outside the
+workspace is left alone — matching `go` tooling).
 
 **Not a Go project?** gospect is Go-only. Point it at a non-Go repo and it says so and names what it
 looks like (`… looks like a JavaScript/TypeScript project. gospect-mcp is Go-only.`).
@@ -94,6 +99,23 @@ To silence a whole detector for one run, use `check -ignore <detector,...>`.
 
 **Generated code is skipped automatically** — files with the standard `// Code generated … DO NOT
 EDIT.` marker never contribute findings. Pass `-include-generated` to scan them anyway.
+
+## Config file (`.gospect.yml`)
+
+Set per-repo defaults once instead of repeating flags. Put a `.gospect.yml` in the directory you
+scan; **explicit CLI flags always override it.**
+
+```yaml
+# .gospect.yml
+pedantic: true       # run the hygiene heuristics by default
+staticcheck: true    # run the SA analyzers by default
+untested: false
+vuln: false
+fail-on: medium      # default gate severity for `check`
+```
+
+Suppression (path globs, per-detector) stays in [`.gospectignore`](#suppressing-findings) — this
+file is only for the behavioral toggles above.
 
 ## Baseline mode
 
@@ -235,6 +257,10 @@ takes the same stdio config:
 
 Because the server is report-only, an agent **can't** change your code through gospect — only read
 findings and, on request, a fix envelope.
+
+The `scan` tool accepts `include_fix: true` — each finding then carries its fix envelope (root cause,
+verify-first checklist, constraints) inline, so an agent can act in one round-trip instead of calling
+`propose_fix` per finding.
 
 ## Whole-repo detectors & the code graph
 

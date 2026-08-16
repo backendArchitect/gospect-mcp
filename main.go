@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/agent"
+	"github.com/backendArchitect/gospect-mcp/internal/config"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/fix"
 	"github.com/backendArchitect/gospect-mcp/internal/fixer"
@@ -113,7 +114,7 @@ Flags (scan, check):
   -vuln               also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)
   -include-generated  also report findings in generated ("DO NOT EDIT") files (skipped by default)
 Flags (scan):
-  -format <fmt>       json|text|sarif (default json; sarif = GitHub code-scanning)
+  -format <fmt>       json|text|md|sarif (default json; md = PR comment/summary; sarif = code-scanning)
   -exit-code          exit 1 if any findings remain (after filters/baseline)
 Flags (check):
   -fail-on <sev>      minimum severity that fails: high|medium|low (default high)
@@ -140,13 +141,31 @@ Docs: https://github.com/backendArchitect/gospect-mcp
 `)
 }
 
+// flagsSet returns the set of flags the user passed explicitly (so config defaults don't clobber them).
+func flagsSet(fs *flag.FlagSet) map[string]bool {
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	return set
+}
+
+// loadConfig reads .gospect.yml from dir; a parse error is a warning, not a fatal (a bad config
+// shouldn't block a scan).
+func loadConfig(dir string) *config.Config {
+	cfg, err := config.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gospect: ignoring", err)
+		return nil
+	}
+	return cfg
+}
+
 // runScan is the standalone CLI: scan a module/monorepo and print the JSON report. Flags precede
 // the positional args: `scan [flags] <dir> [patterns...]`.
 func runScan() {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	verbose := fs.Bool("verbose", true, "stream load/detector progress and a summary to stderr (on by default)")
 	quiet := fs.Bool("quiet", false, "silence all progress on stderr (JSON on stdout is unaffected)")
-	format := fs.String("format", "json", "output format: json|text|sarif")
+	format := fs.String("format", "json", "output format: json|text|md|sarif")
 	baseline := fs.String("baseline", "", "path to a saved report; show only findings NOT already in it")
 	exitCode := fs.Bool("exit-code", false, "exit 1 if any findings remain (after filters/baseline)")
 	vuln := fs.Bool("vuln", false, "also run govulncheck for known-CVE dependencies (slow, needs the vuln DB)")
@@ -164,6 +183,15 @@ func runScan() {
 		fmt.Fprintln(os.Stderr, "usage: gospect-mcp scan [flags] <dir> [patterns...]")
 		fmt.Fprintln(os.Stderr, "(run gospect-mcp with no arguments to start the MCP server)")
 		os.Exit(2)
+	}
+
+	// .gospect.yml in the scan dir supplies defaults; explicit flags still win.
+	if cfg := loadConfig(args[0]); cfg != nil {
+		set := flagsSet(fs)
+		config.ApplyBool(set, "pedantic", pedantic, cfg.Pedantic)
+		config.ApplyBool(set, "staticcheck", staticcheck, cfg.Staticcheck)
+		config.ApplyBool(set, "untested", untested, cfg.Untested)
+		config.ApplyBool(set, "vuln", vuln, cfg.Vuln)
 	}
 
 	ctx := context.Background()
@@ -194,6 +222,8 @@ func runScan() {
 	switch *format {
 	case "text":
 		printFindingsText(rep)
+	case "md", "markdown":
+		printFindingsMarkdown(rep)
 	case "sarif":
 		out, _ := json.MarshalIndent(rep.SARIF(selfupdate.Current()), "", "  ")
 		fmt.Println(string(out))
@@ -417,6 +447,35 @@ func printFindingsText(rep *scan.Report) {
 	}
 }
 
+// printFindingsMarkdown renders a GitHub-flavored findings table (bugs first) — drop it straight
+// into a PR comment or $GITHUB_STEP_SUMMARY, so CI needn't hand-roll the same markdown.
+func printFindingsMarkdown(rep *scan.Report) {
+	emoji := map[string]string{"high": "🔴", "medium": "🟠", "low": "🟡"}
+	fmt.Println("## 🩺 gospect findings")
+	fmt.Println()
+	if rep.FindingCount == 0 {
+		fmt.Println("✅ **No findings.** This module is clean.")
+		return
+	}
+	var chips []string
+	for _, s := range []string{"high", "medium", "low"} {
+		if n := rep.BySeverity[s]; n > 0 {
+			chips = append(chips, fmt.Sprintf("%s %d %s", emoji[s], n, s))
+		}
+	}
+	fmt.Printf("**%d** finding(s) — %s\n\n", rep.FindingCount, strings.Join(chips, " · "))
+	fmt.Println("| | severity | detector | location | message |")
+	fmt.Println("|---|---|---|---|---|")
+	for _, f := range rep.Findings {
+		loc := filepath.Base(f.File)
+		if f.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", filepath.Base(f.File), f.Line)
+		}
+		msg := strings.ReplaceAll(f.Message, "|", "\\|")
+		fmt.Printf("| %s | %s | `%s` | `%s` | %s |\n", emoji[f.Severity], f.Severity, f.Detector, loc, msg)
+	}
+}
+
 // parseArgs parses a subcommand's flags from os.Args[2:] and returns the positional args. Unlike a
 // single flag.Parse, it allows flags to appear ANYWHERE — before, after, or between positionals
 // (e.g. `scan ./dir -format text`), which the flag package otherwise refuses (it stops at the first
@@ -516,6 +575,19 @@ func allowFixEnabled(flag bool) bool {
 	return flag || os.Getenv("GOSPECT_ALLOW_FIX") == "1"
 }
 
+// findingWithFix is a scan finding plus its fix envelope, emitted when the scan tool is called with
+// include_fix. scanWithFix shadows Report.Findings with the enriched list (a shallower JSON field
+// wins over the embedded one).
+type findingWithFix struct {
+	detect.Finding
+	Fix fix.Envelope `json:"fix"`
+}
+
+type scanWithFix struct {
+	*scan.Report
+	Findings []findingWithFix `json:"findings"`
+}
+
 // runServer starts the MCP stdio server. The server is report-only; it exposes a code-mutating
 // `fix` tool only when allowFix is true.
 func runServer(allowFix bool) {
@@ -539,13 +611,18 @@ func runServer(allowFix bool) {
 					"items":       map[string]any{"type": "string"},
 					"description": "Package patterns to scan (default [\"./...\"])",
 				},
+				"include_fix": map[string]any{
+					"type":        "boolean",
+					"description": "Attach a fix envelope (root cause, verify-first checklist, constraints) to each finding, so you can act without a second propose_fix call.",
+				},
 			},
 			"required": []string{"path"},
 		},
 		Handler: func(args json.RawMessage) (string, error) {
 			var a struct {
-				Path     string   `json:"path"`
-				Patterns []string `json:"patterns"`
+				Path       string   `json:"path"`
+				Patterns   []string `json:"patterns"`
+				IncludeFix bool     `json:"include_fix"`
 			}
 			if err := json.Unmarshal(args, &a); err != nil {
 				return "", fmt.Errorf("invalid arguments: %w", err)
@@ -559,7 +636,18 @@ func runServer(allowFix bool) {
 			if err != nil {
 				return "", err
 			}
-			out, err := json.MarshalIndent(rep, "", "  ")
+			var out []byte
+			if a.IncludeFix {
+				// Tighter agent loop: fold each finding's fix envelope into the report so the
+				// caller has everything in one round-trip.
+				wf := make([]findingWithFix, len(rep.Findings))
+				for i, f := range rep.Findings {
+					wf[i] = findingWithFix{Finding: f, Fix: fix.Build(f)}
+				}
+				out, err = json.MarshalIndent(scanWithFix{Report: rep, Findings: wf}, "", "  ")
+			} else {
+				out, err = json.MarshalIndent(rep, "", "  ")
+			}
 			if err != nil {
 				return "", err
 			}
@@ -715,6 +803,16 @@ func runCheck() {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: gospect-mcp check [flags] <dir> [patterns...]")
 		os.Exit(2)
+	}
+
+	// .gospect.yml defaults (fail-on + the analysis toggles); explicit flags win.
+	if cfg := loadConfig(args[0]); cfg != nil {
+		set := flagsSet(fs)
+		config.ApplyString(set, "fail-on", failOn, cfg.FailOn)
+		config.ApplyBool(set, "pedantic", pedantic, cfg.Pedantic)
+		config.ApplyBool(set, "staticcheck", staticcheck, cfg.Staticcheck)
+		config.ApplyBool(set, "untested", untested, cfg.Untested)
+		config.ApplyBool(set, "vuln", vuln, cfg.Vuln)
 	}
 
 	ctx := context.Background()
