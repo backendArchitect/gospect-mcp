@@ -9,6 +9,14 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
 
 ## Unreleased
 
+### Fixed
+- Real-repo shakedown (Go stdlib + gorilla/mux, go-chi/chi, cobra, logrus): no
+  crashes; default scan is near-zero on clean code. Split nilness's noisy
+  impossible/tautological-condition diagnostics into a `-pedantic`-only
+  `nil-condition` detector (they false-positived on correct code); lowered
+  `bodyclose` confidence to medium (heuristic, FPs on hijacked connections);
+  empty `findings` now serializes as `[]` instead of `null`.
+
 ### Changed
 - **Default scan is now genuine bugs only.** The opinionated hygiene heuristics
   (`unchecked-error`, `high-complexity`, `todo`, `go-version`) moved behind a new
