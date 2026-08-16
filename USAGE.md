@@ -69,6 +69,10 @@ Multi-module discovery kicks in only for the default `./...` pattern. If a modul
 (stale vendoring, a private dependency), it's **skipped with a reason** on stderr and listed in the
 report's `skipped_modules` — the rest still scan. A partial scan never masquerades as full coverage.
 
+**Go workspaces (`go.work`).** If the directory has a `go.work`, gospect scans exactly its `use`
+modules (cross-module workspace imports resolve correctly, and a stray nested `go.mod` outside the
+workspace is left alone — matching `go` tooling).
+
 **Not a Go project?** gospect is Go-only. Point it at a non-Go repo and it says so and names what it
 looks like (`… looks like a JavaScript/TypeScript project. gospect-mcp is Go-only.`).
 

@@ -6,6 +6,7 @@ package loader
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -64,7 +66,12 @@ func LoadWithProgress(dir string, progress func(string), patterns ...string) ([]
 	if !hasGo && len(roots) == 0 {
 		return nil, Stats{}, &NotGoError{Dir: dir, Hint: hint}
 	}
-	if !isWholeTree(patterns) || len(roots) == 0 {
+	// A go.work governs which modules are in play. Scan exactly its `use` set — a nested go.mod that
+	// isn't a workspace module can't load in workspace mode (go list rejects it), so walking for
+	// every go.mod would error on it and silently drop its findings.
+	if ws, ok := workspaceUseRoots(dir); ok && isWholeTree(patterns) {
+		roots = ws
+	} else if !isWholeTree(patterns) || len(roots) == 0 {
 		roots = []string{dir} // explicit patterns, or loose .go files with no go.mod
 	}
 
@@ -300,6 +307,31 @@ var foreignMarkers = map[string]string{
 var foreignDirSuffixes = map[string]string{
 	".xcodeproj":   "Xcode (iOS/macOS)",
 	".xcworkspace": "Xcode (iOS/macOS)",
+}
+
+// workspaceUseRoots returns the absolute module directories a go.work at dir declares in its `use`
+// set, and true when a go.work is present. Those are the modules `go` treats as the workspace; a
+// stray nested go.mod outside the set can't be loaded in workspace mode, so scanning the use set is
+// both correct and matches go tooling. (go/packages auto-applies the go.work when loading each.)
+func workspaceUseRoots(dir string) ([]string, bool) {
+	wf := filepath.Join(dir, "go.work")
+	data, err := os.ReadFile(wf)
+	if err != nil {
+		return nil, false
+	}
+	f, err := modfile.ParseWork(wf, data, nil)
+	if err != nil {
+		return nil, false // malformed go.work — fall back to nested-go.mod discovery
+	}
+	var roots []string
+	for _, u := range f.Use {
+		p := u.Path
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(dir, p)
+		}
+		roots = append(roots, filepath.Clean(p))
+	}
+	return roots, len(roots) > 0
 }
 
 // survey walks dir once and reports: every module root (dir containing go.mod), whether any .go

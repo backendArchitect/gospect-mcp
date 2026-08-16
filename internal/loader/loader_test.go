@@ -82,6 +82,34 @@ func TestLoad_ParallelMultiModule(t *testing.T) {
 	}
 }
 
+// TestLoad_GoWorkScopesToUseSet verifies that with a go.work present, only the workspace's `use`
+// modules are loaded — a nested go.mod outside the workspace must not error the load or contribute.
+func TestLoad_GoWorkScopesToUseSet(t *testing.T) {
+	dir := t.TempDir()
+	for _, m := range []string{"a", "b", "outside"} {
+		mustWrite(t, filepath.Join(dir, m, "go.mod"), "module example.com/"+m+"\n\ngo 1.25\n")
+		mustWrite(t, filepath.Join(dir, m, "x.go"), "package "+m+"\n\nfunc F() {}\n")
+	}
+	// The workspace uses only a and b; "outside" is a stray module.
+	mustWrite(t, filepath.Join(dir, "go.work"), "go 1.25\n\nuse (\n\t./a\n\t./b\n)\n")
+
+	pkgs, stats, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats.Roots) != 2 {
+		t.Fatalf("loaded %d roots, want 2 (the use set): %v", len(stats.Roots), stats.Roots)
+	}
+	if stats.Errors != 0 || len(stats.Skipped) != 0 {
+		t.Fatalf("workspace load had errors/skips: errors=%d skipped=%v", stats.Errors, stats.Skipped)
+	}
+	for _, p := range pkgs {
+		if p.PkgPath == "example.com/outside" {
+			t.Fatalf("scanned a module outside the workspace use set: %s", p.PkgPath)
+		}
+	}
+}
+
 func TestLoadConcurrency(t *testing.T) {
 	// Never below 2, never above the module count.
 	if got := loadConcurrency(1); got != 1 {
