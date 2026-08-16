@@ -240,6 +240,10 @@ takes the same stdio config:
 Because the server is report-only, an agent **can't** change your code through gospect — only read
 findings and, on request, a fix envelope.
 
+The `scan` tool accepts `include_fix: true` — each finding then carries its fix envelope (root cause,
+verify-first checklist, constraints) inline, so an agent can act in one round-trip instead of calling
+`propose_fix` per finding.
+
 ## Whole-repo detectors & the code graph
 
 Two detectors need a repo-wide view and run off a **built-in graph** of the loaded packages:

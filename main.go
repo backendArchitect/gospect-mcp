@@ -547,6 +547,19 @@ func allowFixEnabled(flag bool) bool {
 	return flag || os.Getenv("GOSPECT_ALLOW_FIX") == "1"
 }
 
+// findingWithFix is a scan finding plus its fix envelope, emitted when the scan tool is called with
+// include_fix. scanWithFix shadows Report.Findings with the enriched list (a shallower JSON field
+// wins over the embedded one).
+type findingWithFix struct {
+	detect.Finding
+	Fix fix.Envelope `json:"fix"`
+}
+
+type scanWithFix struct {
+	*scan.Report
+	Findings []findingWithFix `json:"findings"`
+}
+
 // runServer starts the MCP stdio server. The server is report-only; it exposes a code-mutating
 // `fix` tool only when allowFix is true.
 func runServer(allowFix bool) {
@@ -570,13 +583,18 @@ func runServer(allowFix bool) {
 					"items":       map[string]any{"type": "string"},
 					"description": "Package patterns to scan (default [\"./...\"])",
 				},
+				"include_fix": map[string]any{
+					"type":        "boolean",
+					"description": "Attach a fix envelope (root cause, verify-first checklist, constraints) to each finding, so you can act without a second propose_fix call.",
+				},
 			},
 			"required": []string{"path"},
 		},
 		Handler: func(args json.RawMessage) (string, error) {
 			var a struct {
-				Path     string   `json:"path"`
-				Patterns []string `json:"patterns"`
+				Path       string   `json:"path"`
+				Patterns   []string `json:"patterns"`
+				IncludeFix bool     `json:"include_fix"`
 			}
 			if err := json.Unmarshal(args, &a); err != nil {
 				return "", fmt.Errorf("invalid arguments: %w", err)
@@ -590,7 +608,18 @@ func runServer(allowFix bool) {
 			if err != nil {
 				return "", err
 			}
-			out, err := json.MarshalIndent(rep, "", "  ")
+			var out []byte
+			if a.IncludeFix {
+				// Tighter agent loop: fold each finding's fix envelope into the report so the
+				// caller has everything in one round-trip.
+				wf := make([]findingWithFix, len(rep.Findings))
+				for i, f := range rep.Findings {
+					wf[i] = findingWithFix{Finding: f, Fix: fix.Build(f)}
+				}
+				out, err = json.MarshalIndent(scanWithFix{Report: rep, Findings: wf}, "", "  ")
+			} else {
+				out, err = json.MarshalIndent(rep, "", "  ")
+			}
 			if err != nil {
 				return "", err
 			}
