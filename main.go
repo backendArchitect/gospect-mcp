@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/backendArchitect/gospect-mcp/internal/agent"
+	"github.com/backendArchitect/gospect-mcp/internal/config"
 	"github.com/backendArchitect/gospect-mcp/internal/detect"
 	"github.com/backendArchitect/gospect-mcp/internal/fix"
 	"github.com/backendArchitect/gospect-mcp/internal/fixer"
@@ -140,6 +141,24 @@ Docs: https://github.com/backendArchitect/gospect-mcp
 `)
 }
 
+// flagsSet returns the set of flags the user passed explicitly (so config defaults don't clobber them).
+func flagsSet(fs *flag.FlagSet) map[string]bool {
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	return set
+}
+
+// loadConfig reads .gospect.yml from dir; a parse error is a warning, not a fatal (a bad config
+// shouldn't block a scan).
+func loadConfig(dir string) *config.Config {
+	cfg, err := config.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gospect: ignoring", err)
+		return nil
+	}
+	return cfg
+}
+
 // runScan is the standalone CLI: scan a module/monorepo and print the JSON report. Flags precede
 // the positional args: `scan [flags] <dir> [patterns...]`.
 func runScan() {
@@ -164,6 +183,15 @@ func runScan() {
 		fmt.Fprintln(os.Stderr, "usage: gospect-mcp scan [flags] <dir> [patterns...]")
 		fmt.Fprintln(os.Stderr, "(run gospect-mcp with no arguments to start the MCP server)")
 		os.Exit(2)
+	}
+
+	// .gospect.yml in the scan dir supplies defaults; explicit flags still win.
+	if cfg := loadConfig(args[0]); cfg != nil {
+		set := flagsSet(fs)
+		config.ApplyBool(set, "pedantic", pedantic, cfg.Pedantic)
+		config.ApplyBool(set, "staticcheck", staticcheck, cfg.Staticcheck)
+		config.ApplyBool(set, "untested", untested, cfg.Untested)
+		config.ApplyBool(set, "vuln", vuln, cfg.Vuln)
 	}
 
 	ctx := context.Background()
@@ -775,6 +803,16 @@ func runCheck() {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: gospect-mcp check [flags] <dir> [patterns...]")
 		os.Exit(2)
+	}
+
+	// .gospect.yml defaults (fail-on + the analysis toggles); explicit flags win.
+	if cfg := loadConfig(args[0]); cfg != nil {
+		set := flagsSet(fs)
+		config.ApplyString(set, "fail-on", failOn, cfg.FailOn)
+		config.ApplyBool(set, "pedantic", pedantic, cfg.Pedantic)
+		config.ApplyBool(set, "staticcheck", staticcheck, cfg.Staticcheck)
+		config.ApplyBool(set, "untested", untested, cfg.Untested)
+		config.ApplyBool(set, "vuln", vuln, cfg.Vuln)
 	}
 
 	ctx := context.Background()
