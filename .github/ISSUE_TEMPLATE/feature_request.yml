@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a detector, flag, or capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The real situation you hit. "As a … I want … so that …" works well.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+      description: What should gospect do? If it's a new detector, what should it flag (and NOT flag)?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing flags, `golangci-lint`, or workarounds you tried.
+    validations:
+      required: false
