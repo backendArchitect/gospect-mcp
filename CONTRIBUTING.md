@@ -8,7 +8,7 @@ By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Build from source
 
-You need **Go 1.25+** (the analysis libraries gospect wraps — `golang.org/x/tools` and
+You need **Go 1.26+** (the analysis libraries gospect wraps — `golang.org/x/tools` and
 `staticcheck` — require it). No C compiler, no external services.
 
 ```sh

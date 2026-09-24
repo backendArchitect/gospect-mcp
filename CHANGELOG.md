@@ -14,6 +14,8 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
   fewer findings than the CLI on the same repo).
 - Diff mode (`-since`) with no changed Go files no longer reports module-level findings
   (`go-version`, `vuln`) on the untouched tree.
+- Crash (`unexpected expr: *ast.KeyValueExpr`) in the staticcheck analyzers under Go 1.27: upgraded
+  `honnef.co/go/tools` v0.7.0 → v0.8.1.
 - Real-repo shakedown (Go stdlib + gorilla/mux, go-chi/chi, cobra, logrus): no
   crashes; default scan is near-zero on clean code. Split nilness's noisy
   impossible/tautological-condition diagnostics into a `-pedantic`-only
@@ -22,6 +24,8 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
   empty `findings` now serializes as `[]` instead of `null`.
 
 ### Changed
+- The `go.mod` floor is now `go 1.26.0` (required by staticcheck v0.8.1). This only affects building
+  from source; prebuilt binaries and the Docker image need no Go install.
 - **Default scan is now genuine bugs only.** The opinionated hygiene heuristics
   (`unchecked-error`, `high-complexity`, `todo`, `go-version`) moved behind a new
   `-pedantic` flag after a real-world shakedown showed they drowned the signal

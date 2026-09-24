@@ -1,6 +1,6 @@
 # gospect-mcp
 
-![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 ![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-gospect--mcp-2ea44f?logo=github)](https://github.com/marketplace/actions/gospect-mcp)
@@ -128,7 +128,7 @@ How the safety net works, agent options, and the guarded MCP fix tool: [USAGE.md
 
 > **No Go toolchain? No problem.** The **prebuilt binaries** and the **Docker image** need nothing
 > installed. Only the build-from-source paths — `go install`, and Homebrew/pre-commit (which compile
-> it) — need **Go 1.25+** (Homebrew installs its own Go automatically).
+> it) — need **Go 1.26+** (Homebrew installs its own Go automatically).
 
 Prebuilt binaries (Linux/macOS/Windows · amd64 & arm64) are on the
 [Releases page](https://github.com/backendArchitect/gospect-mcp/releases). Run `gospect-mcp help`
