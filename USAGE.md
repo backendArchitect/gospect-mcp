@@ -258,7 +258,12 @@ takes the same stdio config:
 Because the server is report-only, an agent **can't** change your code through gospect — only read
 findings and, on request, a fix envelope.
 
-The `scan` tool accepts `include_fix: true` — each finding then carries its fix envelope (root cause,
+The `scan` tool takes the same options as the CLI — `since` (e.g. `"HEAD"` to check just what you
+changed), `pedantic`, `staticcheck`, and the `min_severity`/`category`/`detector` filters — and honors
+the repo's `.gospect.yml`, so your editor and your terminal report the same findings.
+[Full input list →](#the-scan-tool)
+
+The `scan` tool also accepts `include_fix: true` — each finding then carries its fix envelope (root cause,
 verify-first checklist, constraints) inline, so an agent can act in one round-trip instead of calling
 `propose_fix` per finding.
 
@@ -317,6 +322,9 @@ The default set is built entirely on `golang.org/x/tools`.
 ## The `scan` tool
 
 **Input:** `path` (string, required) — the Go module dir; `patterns` (string[], default `["./..."]`).
+Optional, mirroring the CLI flags: `since` (git ref — diff mode), `pedantic`, `staticcheck`,
+`min_severity`, `min_confidence`, `category` (string[]), `detector` (string[]), `include_fix`.
+The repo's `.gospect.yml` applies exactly as it does for the CLI; an explicit argument wins.
 
 **Output:** a JSON `Report` — load stats plus a flat, severity-sorted list of findings:
 

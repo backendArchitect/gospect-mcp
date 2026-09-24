@@ -10,6 +10,10 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
 ## Unreleased
 
 ### Fixed
+- The MCP `scan` tool now honors `.gospect.yml` (it was silently ignored, so an editor could report
+  fewer findings than the CLI on the same repo).
+- Diff mode (`-since`) with no changed Go files no longer reports module-level findings
+  (`go-version`, `vuln`) on the untouched tree.
 - Real-repo shakedown (Go stdlib + gorilla/mux, go-chi/chi, cobra, logrus): no
   crashes; default scan is near-zero on clean code. Split nilness's noisy
   impossible/tautological-condition diagnostics into a `-pedantic`-only
@@ -27,6 +31,9 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
   corrected the previously inaccurate "Go 1.21+" claim.
 
 ### Added
+- MCP `scan` tool options matching the CLI: `since` (diff mode), `pedantic`, `staticcheck`,
+  `min_severity`, `min_confidence`, `category`, `detector`. A `since` ref starting with `-` is
+  rejected so it can never be read as a git option.
 - Second-tier bug detectors (default): `waitgroup`, `deepequalerrors`,
   `reflectvaluecompare`, `slog`, `defers`. Plus `shadow` under `-pedantic`.
 - `misspell` detector (under `-pedantic`): common typos in comments and

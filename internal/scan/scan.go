@@ -151,7 +151,9 @@ func ScanWithOptions(dir string, opt Options) (*Report, error) {
 		findings = withoutDetectors(findings, "nil-condition", "shadow")
 	}
 	modRoots := stats.Roots
-	if len(modRoots) == 0 {
+	// In diff mode no roots means nothing changed; falling back to dir would report module-level
+	// findings (go-version, vuln) on an untouched tree.
+	if len(modRoots) == 0 && !opt.DiffMode {
 		modRoots = []string{dir}
 	}
 	// Modernize emits only `go-version` (an outdated go.mod directive) — it fires on nearly every

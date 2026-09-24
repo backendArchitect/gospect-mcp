@@ -510,16 +510,31 @@ func diffOptions(dir, ref string) (bool, []string) {
 	if ref == "" {
 		return false, nil
 	}
+	files, err := changedGoFiles(dir, ref)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gospect: -since:", err)
+		os.Exit(2)
+	}
+	fmt.Fprintf(os.Stderr, "gospect: diff mode — %d changed Go file(s) since %s\n", len(files), ref)
+	return true, files
+}
+
+// changedGoFiles returns the .go files changed since ref, as absolute paths. It returns an error
+// rather than exiting so the MCP server (a long-lived process) can report it as a tool error.
+func changedGoFiles(dir, ref string) ([]string, error) {
+	// A ref starting with "-" would be parsed by git as an option (e.g. --output=<file> writes a
+	// file). The MCP `since` argument is caller-supplied, so reject it outright.
+	if strings.HasPrefix(ref, "-") {
+		return nil, fmt.Errorf("invalid git ref %q", ref)
+	}
 	top, err := gitOutput(dir, "rev-parse", "--show-toplevel")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gospect: -since needs a git repository (%v)\n", err)
-		os.Exit(2)
+		return nil, fmt.Errorf("needs a git repository (%v)", err)
 	}
 	top = strings.TrimSpace(top)
 	out, err := gitOutput(dir, "diff", "--name-only", ref, "--", "*.go")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "gospect: -since:", err)
-		os.Exit(2)
+		return nil, err
 	}
 	var files []string
 	for _, line := range strings.Split(out, "\n") {
@@ -527,8 +542,7 @@ func diffOptions(dir, ref string) (bool, []string) {
 			files = append(files, filepath.Join(top, line))
 		}
 	}
-	fmt.Fprintf(os.Stderr, "gospect: diff mode — %d changed Go file(s) since %s\n", len(files), ref)
-	return true, files
+	return files, nil
 }
 
 func gitOutput(dir string, args ...string) (string, error) {
@@ -615,43 +629,43 @@ func runServer(allowFix bool) {
 					"type":        "boolean",
 					"description": "Attach a fix envelope (root cause, verify-first checklist, constraints) to each finding, so you can act without a second propose_fix call.",
 				},
+				"since": map[string]any{
+					"type":        "string",
+					"description": "Diff mode: scan only packages with .go files changed since this git ref (e.g. origin/main, HEAD). Much faster; skips whole-repo detectors.",
+				},
+				"pedantic": map[string]any{
+					"type":        "boolean",
+					"description": "Also run the noisier hygiene heuristics (unchecked-error, todo, high-complexity, misspell, ...). Defaults to the repo's .gospect.yml, else false.",
+				},
+				"staticcheck": map[string]any{
+					"type":        "boolean",
+					"description": "Also run the staticcheck SA analyzers (deeper, ~10x slower). Defaults to the repo's .gospect.yml, else false.",
+				},
+				"min_severity": map[string]any{
+					"type":        "string",
+					"enum":        []string{"low", "medium", "high"},
+					"description": "Keep only findings at/above this severity.",
+				},
+				"min_confidence": map[string]any{
+					"type":        "string",
+					"enum":        []string{"low", "medium", "high"},
+					"description": "Keep only findings at/above this confidence.",
+				},
+				"category": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "Keep only these categories (e.g. [\"bug\"]).",
+				},
+				"detector": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "Keep only these detectors (e.g. [\"nilness\"]).",
+				},
 			},
 			"required": []string{"path"},
 		},
 		Handler: func(args json.RawMessage) (string, error) {
-			var a struct {
-				Path       string   `json:"path"`
-				Patterns   []string `json:"patterns"`
-				IncludeFix bool     `json:"include_fix"`
-			}
-			if err := json.Unmarshal(args, &a); err != nil {
-				return "", fmt.Errorf("invalid arguments: %w", err)
-			}
-			if a.Path == "" {
-				return "", fmt.Errorf("path is required")
-			}
-			rep, err := scan.ScanWithOptions(a.Path, scan.Options{
-				Patterns: a.Patterns, Graph: g, GraphScope: scope,
-			})
-			if err != nil {
-				return "", err
-			}
-			var out []byte
-			if a.IncludeFix {
-				// Tighter agent loop: fold each finding's fix envelope into the report so the
-				// caller has everything in one round-trip.
-				wf := make([]findingWithFix, len(rep.Findings))
-				for i, f := range rep.Findings {
-					wf[i] = findingWithFix{Finding: f, Fix: fix.Build(f)}
-				}
-				out, err = json.MarshalIndent(scanWithFix{Report: rep, Findings: wf}, "", "  ")
-			} else {
-				out, err = json.MarshalIndent(rep, "", "  ")
-			}
-			if err != nil {
-				return "", err
-			}
-			return string(out), nil
+			return scanToolJSON(g, scope, args)
 		},
 	})
 
@@ -710,6 +724,80 @@ func runServer(allowFix bool) {
 		fmt.Fprintln(os.Stderr, "server error:", err)
 		os.Exit(1)
 	}
+}
+
+// scanToolJSON runs the MCP `scan` tool and returns the report as JSON. It honors the repo's
+// .gospect.yml exactly like the CLI (explicit arguments win), so an editor and a terminal scanning
+// the same repo get the same findings.
+func scanToolJSON(g graph.Graph, scope string, raw []byte) (string, error) {
+	var a struct {
+		Path          string   `json:"path"`
+		Patterns      []string `json:"patterns"`
+		IncludeFix    bool     `json:"include_fix"`
+		Since         string   `json:"since"`
+		Pedantic      *bool    `json:"pedantic"`
+		Staticcheck   *bool    `json:"staticcheck"`
+		MinSeverity   string   `json:"min_severity"`
+		MinConfidence string   `json:"min_confidence"`
+		Category      []string `json:"category"`
+		Detector      []string `json:"detector"`
+	}
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+	if a.Path == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	// An unknown level would silently filter nothing; tell the caller instead.
+	for name, v := range map[string]string{"min_severity": a.MinSeverity, "min_confidence": a.MinConfidence} {
+		if v != "" && v != "low" && v != "medium" && v != "high" {
+			return "", fmt.Errorf("%s must be low, medium, or high (got %q)", name, v)
+		}
+	}
+
+	opt := scan.Options{
+		Patterns: a.Patterns, Graph: g, GraphScope: scope,
+		Pedantic: a.Pedantic != nil && *a.Pedantic, Staticcheck: a.Staticcheck != nil && *a.Staticcheck,
+	}
+	// Same precedence as the CLI: explicit argument > .gospect.yml > default.
+	if cfg := loadConfig(a.Path); cfg != nil {
+		set := map[string]bool{"pedantic": a.Pedantic != nil, "staticcheck": a.Staticcheck != nil}
+		config.ApplyBool(set, "pedantic", &opt.Pedantic, cfg.Pedantic)
+		config.ApplyBool(set, "staticcheck", &opt.Staticcheck, cfg.Staticcheck)
+		config.ApplyBool(set, "untested", &opt.Untested, cfg.Untested)
+		config.ApplyBool(set, "vuln", &opt.Vuln, cfg.Vuln)
+	}
+	if a.Since != "" {
+		files, err := changedGoFiles(a.Path, a.Since)
+		if err != nil {
+			return "", fmt.Errorf("since: %w", err)
+		}
+		opt.DiffMode, opt.ChangedFiles = true, files
+	}
+
+	rep, err := scan.ScanWithOptions(a.Path, opt)
+	if err != nil {
+		return "", err
+	}
+	rep.Apply(scan.FilterOptions{
+		MinSeverity: a.MinSeverity, MinConfidence: a.MinConfidence, Categories: a.Category, Detectors: a.Detector,
+	})
+	var out []byte
+	if a.IncludeFix {
+		// Tighter agent loop: fold each finding's fix envelope into the report so the
+		// caller has everything in one round-trip.
+		wf := make([]findingWithFix, len(rep.Findings))
+		for i, f := range rep.Findings {
+			wf[i] = findingWithFix{Finding: f, Fix: fix.Build(f)}
+		}
+		out, err = json.MarshalIndent(scanWithFix{Report: rep, Findings: wf}, "", "  ")
+	} else {
+		out, err = json.MarshalIndent(rep, "", "  ")
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // fixToolJSON runs one deterministic, verified fix for the MCP `fix` tool and returns the Result as
