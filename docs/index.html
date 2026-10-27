@@ -91,6 +91,7 @@
 }
 </script>
 
+<script>document.documentElement.classList.add('js')</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%8D%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -99,22 +100,28 @@
   :root{
     --bg:#080a10; --bg2:#0a0e17; --elev:#0e1320; --panel:rgba(255,255,255,.035);
     --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.16);
-    --fg:#eaf0f8; --muted:#9aa7ba; --faint:#68748a;
-    --teal:#2dd4bf; --cyan:#38bdf8; --violet:#a78bfa; --go:#00ADD8;
-    --red:#ff6b6b; --amber:#fbbf24; --green:#34d399;
+    --fg:#eaf0f8; --muted:#9aa7ba; --faint:#7d8aa0;
+    --teal:#2dd4bf; --red:#ff6b6b; --amber:#fbbf24;
     --radius:18px; --maxw:1120px;
-    --grad:linear-gradient(110deg,#38bdf8,#2dd4bf 42%,#a78bfa);
+    --grad:linear-gradient(110deg,#38bdf8,#2dd4bf 42%,#a78bfa); --on-grad:#04121a;
     --grad-soft:linear-gradient(110deg,rgba(56,189,248,.16),rgba(45,212,191,.14) 42%,rgba(167,139,250,.16));
   }
+  /* light: every text token re-tuned to ≥4.5:1 on --bg */
   @media (prefers-color-scheme:light){
     :root{ --bg:#fbfcfe; --bg2:#f2f6fb; --elev:#ffffff; --panel:rgba(9,12,20,.025);
       --border:rgba(9,12,20,.10); --border-strong:rgba(9,12,20,.18);
-      --fg:#0b1120; --muted:#48566b; --faint:#7a8699;
-      --grad:linear-gradient(110deg,#0284c7,#0d9488 42%,#7c3aed);
+      --fg:#0b1120; --muted:#48566b; --faint:#5f6b7e;
+      --teal:#0f766e; --red:#dc2626; --amber:#d97706;
+      --grad:linear-gradient(110deg,#0369a1,#0f766e 42%,#6d28d9); --on-grad:#fff;
       --grad-soft:linear-gradient(110deg,rgba(2,132,199,.10),rgba(13,148,136,.09) 42%,rgba(124,58,237,.10));}
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
+  [id]{scroll-margin-top:76px}   /* clear the sticky nav on anchor jumps */
+  :focus-visible{outline:2px solid var(--teal);outline-offset:3px}
+  .skip{position:absolute;left:12px;top:-60px;z-index:60;padding:10px 16px;border-radius:10px;background:var(--elev);border:1px solid var(--border-strong);font-weight:600}
+  .skip:focus{top:12px}
+  .i{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
   body{margin:0;background:var(--bg);color:var(--fg);
     font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -129,17 +136,21 @@
   code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 
-  /* scroll reveal */
-  .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
-  .reveal.in{opacity:1;transform:none}
-  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+  /* scroll reveal — gated on .js so content stays visible without JS */
+  .js .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
+  .js .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *,*::before,*::after{animation:none!important;transition:none!important}
+    .js .reveal{opacity:1;transform:none}
+  }
 
   /* nav */
   header.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(160%) blur(16px);
     background:color-mix(in srgb, var(--bg) 74%, transparent);border-bottom:1px solid var(--border)}
   .nav .wrap{display:flex;align-items:center;gap:18px;height:64px}
   .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:1.08rem}
-  .brand .dot{font-size:1.2rem}
+  .brand .i{font-size:1.2rem;color:var(--teal)}
   .nav nav{margin-left:auto;display:flex;gap:4px;align-items:center}
   .nav nav a{padding:8px 13px;border-radius:10px;color:var(--muted);font-size:.92rem;font-weight:500;transition:.15s}
   .nav nav a:hover{color:var(--fg);background:var(--panel)}
@@ -153,13 +164,13 @@
     background:conic-gradient(from 90deg at 50% 50%, rgba(56,189,248,.12), rgba(45,212,191,.08) 30%, rgba(167,139,250,.12) 60%, rgba(56,189,248,.12));
     filter:blur(90px);opacity:.75;animation:spin 30s linear infinite;pointer-events:none}
   @keyframes spin{to{transform:translateX(-50%) rotate(360deg)}}
-  @media(prefers-reduced-motion:reduce){.hero::before{animation:none}}
   .hero-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:54px;align-items:center}
   .hero-grid > *{min-width:0}   /* let the terminal's long lines scroll, not widen the grid */
   @media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:42px;text-align:center}}
-  .badge{display:inline-flex;align-items:center;gap:9px;font-size:.82rem;color:var(--muted);
+  .badge{display:inline-block;font-size:.82rem;color:var(--muted);
     border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:7px 16px;margin-bottom:24px}
-  .badge b{color:var(--teal);font-weight:700}
+  .badge b,.badge .i{color:var(--teal);font-weight:700;white-space:nowrap}
+  .badge .i{vertical-align:-2px;margin-right:3px}
   .hero h1{font-size:clamp(2.5rem,5vw,4rem);line-height:1.02;letter-spacing:-.04em;margin:0 0 20px;font-weight:900}
   .hero h1 .grad-text{background-size:200% auto;animation:sheen 6s linear infinite}
   @keyframes sheen{to{background-position:200% center}}
@@ -174,7 +185,7 @@
   @media(max-width:900px){.btns{justify-content:center}}
   .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:13px;font-weight:600;font-size:1rem;
     transition:transform .16s ease, box-shadow .16s ease, border-color .16s}
-  .btn.primary{background:var(--grad);color:#04121a;box-shadow:0 12px 34px -8px rgba(56,189,248,.55);font-weight:700}
+  .btn.primary{background:var(--grad);color:var(--on-grad);box-shadow:0 12px 34px -8px rgba(56,189,248,.55);font-weight:700}
   .btn.primary:hover{transform:translateY(-2px);box-shadow:0 18px 46px -10px rgba(56,189,248,.65)}
   .btn.ghost{border:1px solid var(--border-strong);color:var(--fg);background:var(--panel)}
   .btn.ghost:hover{transform:translateY(-2px);border-color:var(--teal)}
@@ -182,23 +193,12 @@
   /* terminal */
   .term-wrap{position:relative}
   .verdict{position:absolute;z-index:2;top:-16px;right:-6px;display:inline-flex;align-items:center;gap:8px;
-    font-family:"JetBrains Mono",monospace;font-size:.82rem;font-weight:600;color:#04121a;background:var(--grad);
-    padding:8px 14px;border-radius:999px;box-shadow:0 10px 30px -8px rgba(45,212,191,.6);animation:bob 4s ease-in-out infinite}
+    font-family:"JetBrains Mono",monospace;font-size:.82rem;font-weight:600;color:var(--on-grad);background:var(--grad);
+    padding:8px 14px;border-radius:999px;white-space:nowrap;box-shadow:0 10px 30px -8px rgba(45,212,191,.6);animation:bob 4s ease-in-out infinite}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-  @media(prefers-reduced-motion:reduce){.verdict{animation:none}}
   @media(max-width:900px){.verdict{right:50%;transform:translateX(50%)}@keyframes bob{0%,100%{transform:translateX(50%)}50%{transform:translateX(50%) translateY(-6px)}}}
-  .term{margin:0;text-align:left;border:1px solid var(--border);
-    border-radius:16px;overflow:hidden;background:#05070c;box-shadow:0 40px 100px -30px rgba(56,189,248,.28), 0 30px 80px -34px rgba(0,0,0,.8)}
   .term-img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:16px;
     box-shadow:0 40px 100px -30px rgba(56,189,248,.28), 0 30px 80px -34px rgba(0,0,0,.8)}
-  @media(prefers-color-scheme:light){.term{background:#0a0e17;border-color:rgba(9,12,20,.14)}}
-  .term .bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02)}
-  .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
-  .term .bar i:nth-child(1){background:#ff5f57}.term .bar i:nth-child(2){background:#febc2e}.term .bar i:nth-child(3){background:#28c840}
-  .term .bar span{margin-left:10px;color:#7a8699;font-size:.8rem;font-family:"JetBrains Mono",monospace}
-  .term pre{margin:0;padding:20px 22px;font-size:13.5px;line-height:1.75;color:#cdd6e4;overflow-x:auto;font-family:"JetBrains Mono",monospace}
-  .term .c-cmd{color:#eaf0f8}.term .c-flag{color:#38bdf8}.term .c-dim{color:#68748a}
-  .term .c-hi{color:#ff6b6b;font-weight:600}.term .c-md{color:#fbbf24}.term .c-ok{color:#2dd4bf}.term .c-path{color:#a78bfa}
 
   /* stat band */
   .stats{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--panel)}
@@ -234,10 +234,8 @@
 
   /* cards */
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;position:relative;
-    transition:transform .2s ease,border-color .2s ease,background .2s ease}
-  .card:hover{transform:translateY(-5px);border-color:var(--border-strong);background:color-mix(in srgb,var(--panel) 55%,var(--teal) 5%)}
-  .card .ico{font-size:1.55rem;display:inline-grid;place-items:center;width:48px;height:48px;border-radius:13px;
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;position:relative}
+  .card .ico{font-size:1.4rem;color:var(--teal);display:inline-grid;place-items:center;width:48px;height:48px;border-radius:13px;
     background:var(--grad-soft);border:1px solid var(--border);margin-bottom:16px}
   .card h3{margin:0 0 7px;font-size:1.12rem;font-weight:700;letter-spacing:-.01em}
   .card p{margin:0;color:var(--muted);font-size:.95rem;line-height:1.56}
@@ -246,23 +244,13 @@
   /* detector chips */
   .chips{display:flex;flex-wrap:wrap;gap:9px}
   .chip{border:1px solid var(--border);background:var(--panel);border-radius:10px;padding:8px 13px;font-size:.86rem;font-weight:500;
-    font-family:"JetBrains Mono",monospace;transition:.16s;display:inline-flex;align-items:center;gap:8px}
-  .chip:hover{border-color:var(--teal);transform:translateY(-2px)}
+    font-family:"JetBrains Mono",monospace;display:inline-flex;align-items:center;gap:8px}
   .chip .d{width:7px;height:7px;border-radius:50%}
   .chip .d.hi{background:var(--red)}.chip .d.md{background:var(--amber)}.chip .d.lo{background:var(--faint)}
   .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;color:var(--faint);font-size:.84rem}
   .legend span{display:inline-flex;align-items:center;gap:7px}
   .legend .d{width:8px;height:8px;border-radius:50%}
   .legend .d.hi{background:var(--red)}.legend .d.md{background:var(--amber)}.legend .d.lo{background:var(--faint)}
-
-  /* pipeline */
-  .pipe{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;position:relative}
-  @media(max-width:760px){.pipe{grid-template-columns:1fr}}
-  .step{border:1px solid var(--border);border-radius:var(--radius);padding:24px;background:var(--panel)}
-  .step .n{font-family:"JetBrains Mono",monospace;font-size:.8rem;color:var(--teal);font-weight:600;margin-bottom:12px}
-  .step h3{margin:0 0 7px;font-size:1.08rem;font-weight:700}
-  .step p{margin:0;color:var(--muted);font-size:.93rem;line-height:1.55}
-  .step p code{color:var(--cyan);font-size:.86em}
 
   /* code block with copy */
   .code{position:relative;background:var(--elev);border:1px solid var(--border);border-radius:13px;margin:14px 0}
@@ -271,6 +259,7 @@
     border-radius:9px;padding:6px 11px;font-size:.72rem;cursor:pointer;font-family:"JetBrains Mono",monospace;transition:.15s}
   .code .copy:hover{color:var(--fg);border-color:var(--teal)}
   .code .copy.done{color:var(--teal);border-color:var(--teal)}
+  @media(pointer:coarse){.code .copy{min-width:44px;min-height:44px;top:5px;right:5px}}
   .lbl{font-size:.82rem;color:var(--faint);margin:22px 0 2px;font-weight:600}
 
   /* table */
@@ -285,11 +274,9 @@
 
   /* pills */
   .pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
-  .pillc{border:1px solid var(--border);background:var(--panel);border-radius:12px;padding:10px 16px;font-size:.9rem;font-weight:500;transition:.16s}
-  .pillc:hover{border-color:var(--teal);transform:translateY(-2px)}
+  .pillc{border:1px solid var(--border);background:var(--panel);border-radius:12px;padding:10px 16px;font-size:.9rem;font-weight:500}
   .pillc b{color:var(--teal)}
 
-  /* CTA band */
   /* faq */
   .faq details{border:1px solid var(--border);border-radius:12px;background:var(--panel);margin:10px 0;overflow:hidden;transition:border-color .18s}
   .faq details[open]{border-color:var(--border-strong)}
@@ -301,6 +288,7 @@
   .faq details p{margin:0;padding:16px 20px;color:var(--muted);line-height:1.6;font-size:.96rem}
   .faq details p code{color:var(--teal);font-family:"JetBrains Mono",monospace}
 
+  /* CTA band */
   .cta-band{border:1px solid var(--border-strong);border-radius:24px;padding:52px 34px;text-align:center;
     background:var(--grad-soft);position:relative;overflow:hidden}
   .cta-band h2{margin:0 0 12px}
@@ -315,17 +303,17 @@
   @media(max-width:600px){
     .hero{padding:70px 0 48px}
     section{padding:60px 0}
-    .term{margin-top:44px}
     .code .copy{box-shadow:-8px 0 10px 4px var(--elev)}
     .code pre{padding-right:64px}
   }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
 <header class="nav">
   <div class="wrap">
-    <a class="brand" href="#top"><span class="dot">🔍</span> gospect-mcp</a>
+    <a class="brand" href="#top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> gospect-mcp</a>
     <nav>
       <a class="hide" href="#why">Why</a>
       <a class="hide" href="#features">Features</a>
@@ -338,12 +326,13 @@
   </div>
 </header>
 
+<main id="main">
 <a id="top"></a>
 <div class="hero">
   <div class="wrap">
     <div class="hero-grid">
       <div class="hero-copy">
-        <span class="badge reveal">🛰️ <b>Report-first</b> · powered by the real Go compiler</span>
+        <span class="badge reveal"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg> <b>Report-first</b> · powered by the real Go compiler</span>
         <h1 class="reveal">Real Go bugs.<br><span class="grad-text">Proven, not guessed.</span></h1>
         <p class="sub reveal">Static analysis that runs the <b>actual Go toolchain</b> and reports only what it
           can prove — no LLM guessing. It never rewrites your code unless you ask.</p>
@@ -361,7 +350,7 @@
 
       <div class="term-wrap reveal">
         <span class="verdict">✓ 6 real bugs · 0 guesses</span>
-        <img class="term-img" src="demo.svg" width="760" height="344" loading="lazy"
+        <img class="term-img" src="demo.svg" width="760" height="344" fetchpriority="high"
              alt="gospect-mcp scanning a Go service and reporting real bugs — nil dereference, printf mismatch, leaked context">
       </div>
     </div>
@@ -412,17 +401,17 @@
     <p class="eyebrow reveal">Why gospect-mcp</p>
     <h2 class="reveal">Built to be trusted, not just run.</h2>
     <div class="grid">
-      <div class="card reveal"><div class="ico">🛰️</div><h3>Report-first</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></div><h3>Report-first</h3>
         <p>The output is a report. It never touches your code — fixing is a separate, opt-in, self-verifying step.</p></div>
-      <div class="card reveal"><div class="ico">🧠</div><h3>Sensor, not oracle</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></svg></div><h3>Sensor, not oracle</h3>
         <p>Pure Go tooling — <code>go/packages</code>, <code>go/analysis</code>, SSA. No model in the server; your agent brings the judgment.</p></div>
-      <div class="card reveal"><div class="ico">🎯</div><h3>Genuine over noisy</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><h3>Genuine over noisy</h3>
         <p>Semantically-backed findings, not grep guesses. Generated code is skipped automatically.</p></div>
-      <div class="card reveal"><div class="ico">📦</div><h3>Monorepo-native</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></div><h3>Monorepo-native</h3>
         <p>Point it at the repo root — every nested <code>go.mod</code> is discovered and scanned in one run.</p></div>
-      <div class="card reveal"><div class="ico">🧹</div><h3>Noise, tamed</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54Z"/></svg></div><h3>Noise, tamed</h3>
         <p>Per-line <code>//gospect:ignore</code>, a repo-wide <code>.gospectignore</code>, and baseline mode for big repos.</p></div>
-      <div class="card reveal"><div class="ico">🔗</div><h3>CI-ready</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg></div><h3>CI-ready</h3>
         <p>Severity gates, PR comments, SARIF annotations, and optional <code>govulncheck</code> for CVE deps.</p></div>
     </div>
   </div>
@@ -575,7 +564,7 @@ gospect-mcp check -baseline base.json .             # gate only on NEW findings<
     <h2 class="reveal">Gating real Go backends.</h2>
     <p class="lead reveal">gospect isn’t a demo — it runs on every pull request in teams shipping Go to production.</p>
     <div class="grid">
-      <div class="card reveal"><div class="ico">🌦️</div><h3>La Crosse Technology</h3>
+      <div class="card reveal"><div class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg></div><h3>La Crosse Technology</h3>
         <p>The first team to adopt gospect in CI — it gates every pull request on their Go backend.
           <a class="grad-text" href="https://www.lacrossetechnology.com/">lacrossetechnology.com&nbsp;→</a></p></div>
     </div>
@@ -627,6 +616,7 @@ gospect-mcp check -baseline base.json .             # gate only on NEW findings<
     </div>
   </div>
 </section>
+</main>
 
 <footer>
   <div class="wrap">
@@ -644,12 +634,16 @@ gospect-mcp check -baseline base.json .             # gate only on NEW findings<
 <script>
   // copy buttons
   document.querySelectorAll('.code .copy').forEach(function(btn){
+    btn.setAttribute('aria-live','polite');   // announce "Copied" to screen readers
+    function flash(msg){
+      btn.textContent=msg; btn.classList.add('done');
+      setTimeout(function(){ btn.textContent='Copy'; btn.classList.remove('done'); }, 1600);
+    }
     btn.addEventListener('click', function(){
       var pre = btn.parentElement.querySelector('pre');
-      navigator.clipboard.writeText(pre.innerText.replace(/​/g,'')).then(function(){
-        btn.textContent='Copied'; btn.classList.add('done');
-        setTimeout(function(){ btn.textContent='Copy'; btn.classList.remove('done'); }, 1600);
-      });
+      navigator.clipboard.writeText(pre.innerText.replace(/​/g,'')).then(
+        function(){ flash('Copied'); },
+        function(){ flash('Select & copy'); });   // clipboard blocked (http, iframe, permissions)
     });
   });
   // scroll reveal
