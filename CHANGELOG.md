@@ -10,6 +10,9 @@ the project uses [Conventional Commits](https://www.conventionalcommits.org).
 ## Unreleased
 
 ### Fixed
+- SARIF output for a clean scan now writes `results` and `rules` as `[]` instead of `null`. The
+  SARIF 2.1.0 schema requires arrays, so GitHub rejected the upload and the Action's `sarif: true`
+  failed on every scan with no findings. The `$schema` link now points at a URL that resolves.
 - The MCP `scan` tool now honors `.gospect.yml` (it was silently ignored, so an editor could report
   fewer findings than the CLI on the same repo).
 - Diff mode (`-since`) with no changed Go files no longer reports module-level findings
