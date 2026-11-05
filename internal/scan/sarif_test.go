@@ -1,6 +1,23 @@
 package scan
 
-import "testing"
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+)
+
+// GitHub's SARIF upload validates against the 2.1.0 schema, where results and
+// rules must be arrays. A clean scan has to emit [], never null, or the upload
+// (and the gospect Action with sarif: true) fails on every clean run.
+func TestSARIF_EmptyReportHasNoNulls(t *testing.T) {
+	out, err := json.Marshal((&Report{Path: "."}).SARIF("v1.2.3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(out, []byte("null")) {
+		t.Fatalf("SARIF for a clean scan contains null: %s", out)
+	}
+}
 
 func TestSARIF_Shape(t *testing.T) {
 	r := sampleReport()

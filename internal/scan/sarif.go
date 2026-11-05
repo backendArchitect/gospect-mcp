@@ -9,8 +9,9 @@ import "path/filepath"
 // The return value is a plain map tree so it marshals to spec-compliant JSON without a schema dep.
 func (r *Report) SARIF(version string) map[string]any {
 	rules := map[string]bool{}
-	var ruleList []map[string]any
-	var results []map[string]any
+	// Non-nil so a clean scan marshals to [] — the schema rejects null here.
+	ruleList := []map[string]any{}
+	results := []map[string]any{}
 
 	for _, f := range r.Findings {
 		if !rules[f.Detector] {
@@ -43,7 +44,7 @@ func (r *Report) SARIF(version string) map[string]any {
 	}
 
 	return map[string]any{
-		"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
 		"version": "2.1.0",
 		"runs": []map[string]any{{
 			"tool": map[string]any{
